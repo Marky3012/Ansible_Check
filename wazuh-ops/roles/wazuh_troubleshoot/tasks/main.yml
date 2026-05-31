@@ -1,0 +1,31 @@
+---
+# wazuh_troubleshoot — collect, diff, diagnose. Never mutates.
+
+- name: Gather minimal facts
+  ansible.builtin.setup:
+    gather_subset: [min]
+  tags: [troubleshoot]
+
+- name: Ensure local troubleshoot directory exists
+  ansible.builtin.file:
+    path: "{{ troubleshoot_fetch_dir }}/{{ inventory_hostname }}"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  tags: [troubleshoot]
+
+- name: Collect logs
+  ansible.builtin.include_tasks: collect_logs.yml
+  tags: [troubleshoot, collect_logs]
+
+- name: Check ports
+  ansible.builtin.include_tasks: check_ports.yml
+  tags: [troubleshoot, check_ports]
+
+- name: Detect config drift
+  ansible.builtin.include_tasks: detect_drift.yml
+  tags: [troubleshoot, detect_drift]
+
+- name: Bundle artifacts
+  ansible.builtin.include_tasks: bundle_artifact.yml
+  tags: [troubleshoot, bundle_artifact]

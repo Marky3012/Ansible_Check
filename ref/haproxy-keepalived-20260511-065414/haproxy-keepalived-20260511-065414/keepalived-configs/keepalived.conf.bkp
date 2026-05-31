@@ -1,0 +1,42 @@
+global_defs {
+    script_user root 
+    script_security 1
+}
+
+vrrp_script chk_haproxy {
+    script "/etc/keepalived/scripts/check_haproxy.sh"
+    interval 2
+    weight -70
+    fall 2
+    rise 1
+}
+
+vrrp_instance VI_DC {
+    state MASTER
+    interface enp1s0
+    virtual_router_id 51
+    priority 101
+    advert_int 1
+    
+    preempt     
+    preempt_delay 10
+
+    authentication {
+        auth_type PASS
+        auth_pass 1234
+    }
+  
+    virtual_ipaddress {
+        172.21.1.120
+    }
+
+    track_script {
+        chk_haproxy
+    }
+
+#notify_master "/usr/bin/systemctl start haproxy"
+#notify_backup "/usr/bin/systemctl stop haproxy"
+#notify_fault "/usr/bin/systemctl stop haproxy"
+
+}
+

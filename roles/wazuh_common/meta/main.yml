@@ -1,0 +1,28 @@
+---
+# =============================================================================
+# wazuh_common - Role Metadata
+# =============================================================================
+
+galaxy_info:
+  role_name: wazuh_common
+  author: TechBridge
+  description: >-
+    Common tasks for preparing a host to run any Wazuh component.
+    Installs prerequisites, configures the Wazuh package repository,
+    and optionally sets up firewall rules.
+  license: MIT
+  min_ansible_version: '2.14'
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble   # 24.04
+    - name: EL
+      versions:
+        - '8'
+        - '9'
+  galaxy_tags:
+    - wazuh
+    - security
+    - siem
+
+dependencies: []

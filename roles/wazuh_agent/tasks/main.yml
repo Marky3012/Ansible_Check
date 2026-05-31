@@ -1,0 +1,142 @@
+---
+# =============================================================================
+# Wazuh Agent - Main Tasks
+# =============================================================================
+# Installs, configures, and manages the Wazuh Agent service.
+# Supports Ubuntu 24.04 and RHEL-based distributions.
+# Wazuh version: 4.11.2
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# 1. Repository Setup & Package Installation
+# ---------------------------------------------------------------------------
+
+- name: Import Wazuh GPG key (Debian/Ubuntu)
+  ansible.builtin.apt_key:
+    url: "https://packages.wazuh.com/key/GPG-KEY-WAZUH"
+    state: present
+  when: ansible_os_family == "Debian"
+  tags:
+    - install
+
+- name: Add Wazuh repository (Debian/Ubuntu)
+  ansible.builtin.apt_repository:
+    repo: "deb https://packages.wazuh.com/4.x/apt/ stable main"
+    state: present
+    filename: "wazuh"
+    update_cache: true
+  when: ansible_os_family == "Debian"
+  tags:
+    - install
+
+- name: Import Wazuh GPG key (RedHat/CentOS)
+  ansible.builtin.rpm_key:
+    key: "https://packages.wazuh.com/key/GPG-KEY-WAZUH"
+    state: present
+  when: ansible_os_family == "RedHat"
+  tags:
+    - install
+
+- name: Add Wazuh repository (RedHat/CentOS)
+  ansible.builtin.yum_repository:
+    name: "wazuh"
+    description: "Wazuh repository"
+    baseurl: "https://packages.wazuh.com/4.x/yum/"
+    gpgcheck: true
+    gpgkey: "https://packages.wazuh.com/key/GPG-KEY-WAZUH"
+    enabled: true
+  when: ansible_os_family == "RedHat"
+  tags:
+    - install
+
+- name: Install wazuh-agent package (Debian/Ubuntu)
+  ansible.builtin.apt:
+    name: "wazuh-agent={{ wazuh_agent_version }}-*"
+    state: present
+    update_cache: true
+  environment:
+    WAZUH_MANAGER: "{{ wazuh_agent_manager_ip }}"
+  when: ansible_os_family == "Debian"
+  tags:
+    - install
+
+- name: Install wazuh-agent package (RedHat/CentOS)
+  ansible.builtin.yum:
+    name: "wazuh-agent-{{ wazuh_agent_version }}"
+    state: present
+  environment:
+    WAZUH_MANAGER: "{{ wazuh_agent_manager_ip }}"
+  when: ansible_os_family == "RedHat"
+  tags:
+    - install
+
+# ---------------------------------------------------------------------------
+# 2. Registration Password
+# ---------------------------------------------------------------------------
+
+- name: Deploy registration password file
+  ansible.builtin.copy:
+    content: "{{ wazuh_agent_registration_password }}"
+    dest: "{{ wazuh_agent_authd_pass_path }}"
+    owner: "root"
+    group: "wazuh"
+    mode: "0640"
+  when: wazuh_agent_registration_password | length > 0
+  no_log: true
+  notify:
+    - restart wazuh-agent
+  tags:
+    - configure
+    - register
+
+# ---------------------------------------------------------------------------
+# 3. Configuration
+# ---------------------------------------------------------------------------
+
+- name: Template agent ossec.conf
+  ansible.builtin.template:
+    src: "ossec.conf.j2"
+    dest: "/var/ossec/etc/ossec.conf"
+    owner: "root"
+    group: "wazuh"
+    mode: "0640"
+    backup: true
+  notify:
+    - restart wazuh-agent
+  tags:
+    - configure
+
+# ---------------------------------------------------------------------------
+# 4. Service Management
+# ---------------------------------------------------------------------------
+
+- name: Enable and start wazuh-agent service
+  ansible.builtin.systemd:
+    name: "wazuh-agent"
+    enabled: "{{ wazuh_agent_service_enabled }}"
+    state: "{{ wazuh_agent_service_state }}"
+    daemon_reload: true
+  tags:
+    - service
+
+# ---------------------------------------------------------------------------
+# 5. Agent Connection Verification
+# ---------------------------------------------------------------------------
+
+- name: Wait for wazuh-agent control socket
+  ansible.builtin.wait_for:
+    path: "/var/ossec/var/run/wazuh-agentd.state"
+    timeout: 60
+  tags:
+    - service
+    - register
+
+- name: Verify agent is connected to manager
+  ansible.builtin.command:
+    cmd: "/var/ossec/bin/wazuh-control status"
+  register: _agent_status
+  changed_when: false
+  failed_when: "'not running' in _agent_status.stdout"
+  tags:
+    - service
+    - register

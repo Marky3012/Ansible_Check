@@ -1,0 +1,166 @@
+---
+# STAGE 1 — PREFLIGHT
+# Assert all HA nodes are reachable and in expected states before touching anything.
+# Any failure here aborts the play immediately — never proceeds to INVOKE.
+# Tags: recovery, preflight
+
+- name: "[PREFLIGHT] Assert op is set and valid"
+  ansible.builtin.assert:
+    that:
+      - recovery_op in ['failover', 'failback',
+                        'indexer_failover', 'indexer_failback',
+                        'manager_failover', 'manager_failback',
+                        'postgres_failover', 'postgres_failback']
+    fail_msg: >
+      recovery_op '{{ recovery_op }}' is not valid.
+      Valid ops: failover, failback, indexer_failover, indexer_failback,
+      manager_failover, manager_failback, postgres_failover, postgres_failback
+  run_once: true
+  delegate_to: localhost
+  tags: [recovery, preflight]
+
+# ── HAProxy/Keepalived preflight (op: failover | failback) ────────────────────
+- name: "[PREFLIGHT] Assert all haproxy_nodes are reachable"
+  ansible.builtin.wait_for_connection:
+    timeout: 15
+  when: recovery_op in ['failover', 'failback']
+  tags: [recovery, preflight]
+
+- name: "[PREFLIGHT] Check HAProxy service on all HA nodes"
+  ansible.builtin.command:
+    cmd: systemctl is-active haproxy
+  register: preflight_haproxy_active
+  changed_when: false
+  failed_when: false
+  when: recovery_op in ['failover', 'failback']
+  tags: [recovery, preflight]
+
+- name: "[PREFLIGHT] Check Keepalived service on all HA nodes"
+  ansible.builtin.command:
+    cmd: systemctl is-active keepalived
+  register: preflight_keepalived_active
+  changed_when: false
+  failed_when: false
+  when: recovery_op in ['failover', 'failback']
+  tags: [recovery, preflight]
+
+- name: "[PREFLIGHT] Assert at least one node has HAProxy active"
+  ansible.builtin.assert:
+    that:
+      - preflight_haproxy_active.rc == 0
+    fail_msg: "PREFLIGHT FAILED: HAProxy is not active on {{ inventory_hostname }}. Aborting recovery."
+  when:
+    - recovery_op in ['failover', 'failback']
+    - inventory_hostname == groups['haproxy_nodes'] | select('ne', groups['haproxy_nodes'][0]) | first | default(groups['haproxy_nodes'][0])
+  tags: [recovery, preflight]
+
+- name: "[PREFLIGHT] Assert Keepalived is active on all nodes"
+  ansible.builtin.assert:
+    that:
+      - preflight_keepalived_active.rc == 0
+    fail_msg: "PREFLIGHT FAILED: Keepalived is not active on {{ inventory_hostname }}. Aborting recovery."
+  when: recovery_op in ['failover', 'failback']
+  tags: [recovery, preflight]
+
+- name: "[PREFLIGHT] Confirm VIP is present on exactly one node"
+  ansible.builtin.shell:
+    cmd: "ip addr show {{ keepalived_interface }} | grep -c '{{ keepalived_virtual_ip }}' || true"
+  register: preflight_vip_count
+  changed_when: false
+  when: recovery_op in ['failover', 'failback']
+  tags: [recovery, preflight]
+
+- name: "[PREFLIGHT] Set VIP presence fact"
+  ansible.builtin.set_fact:
+    preflight_vip_present: "{{ (preflight_vip_count.stdout | trim | int) > 0 }}"
+  when: recovery_op in ['failover', 'failback']
+  tags: [recovery, preflight]
+
+# ── Indexer preflight (op: indexer_failover | indexer_failback) ───────────────
+- name: "[PREFLIGHT] GATE — Reject 2-node indexer topology (guaranteed split-brain)"
+  ansible.builtin.fail:
+    msg: >
+      PREFLIGHT FAILED: 2-node Wazuh Indexer cluster cannot prevent split-brain.
+      Use 1 node (standalone) or 3+ nodes (quorum-safe).
+      Adjust wazuh_indexers inventory group and re-run.
+  when:
+    - recovery_op in ['indexer_failover', 'indexer_failback']
+    - groups['wazuh_indexers'] | length == 2
+  run_once: true
+  delegate_to: localhost
+  tags: [recovery, preflight]
+
+- name: "[PREFLIGHT] Assert indexer_surviving_node is set for indexer ops"
+  ansible.builtin.assert:
+    that:
+      - indexer_surviving_node != ''
+      - indexer_surviving_node in groups['wazuh_indexers']
+    fail_msg: >
+      PREFLIGHT FAILED: indexer_surviving_node must be a valid wazuh_indexers host.
+      Pass: -e "indexer_surviving_node=<hostname>"
+  when: recovery_op in ['indexer_failover', 'indexer_failback']
+  run_once: true
+  delegate_to: localhost
+  tags: [recovery, preflight]
+
+- name: "[PREFLIGHT] Assert indexer_failing_node is set for indexer_failover"
+  ansible.builtin.assert:
+    that:
+      - indexer_failing_node != ''
+    fail_msg: >
+      PREFLIGHT FAILED: indexer_failing_node is required for indexer_failover.
+      Pass: -e "indexer_failing_node=<OpenSearch-node-name>"
+  when: recovery_op == 'indexer_failover'
+  run_once: true
+  delegate_to: localhost
+  tags: [recovery, preflight]
+
+- name: "[PREFLIGHT] Assert indexer_returning_node is set for indexer_failback"
+  ansible.builtin.assert:
+    that:
+      - indexer_returning_node != ''
+      - indexer_returning_node in groups['wazuh_indexers']
+    fail_msg: >
+      PREFLIGHT FAILED: indexer_returning_node must be a valid wazuh_indexers host.
+      Pass: -e "indexer_returning_node=<hostname>"
+  when: recovery_op == 'indexer_failback'
+  run_once: true
+  delegate_to: localhost
+  tags: [recovery, preflight]
+
+# ── Manager preflight (op: manager_failover | manager_failback) ───────────────
+- name: "[PREFLIGHT] Assert wazuh_managers group is populated"
+  ansible.builtin.assert:
+    that:
+      - groups['wazuh_managers'] | length >= 2
+    fail_msg: >
+      PREFLIGHT FAILED: Manager failover requires at least 2 nodes in wazuh_managers.
+  when: recovery_op in ['manager_failover', 'manager_failback']
+  run_once: true
+  delegate_to: localhost
+  tags: [recovery, preflight]
+
+# ── Postgres preflight (op: postgres_failover | postgres_failback) ────────────
+- name: "[PREFLIGHT] Assert postgres_nodes group is populated"
+  ansible.builtin.assert:
+    that:
+      - groups['postgres_nodes'] | length >= 2
+    fail_msg: >
+      PREFLIGHT FAILED: Postgres failover requires at least 2 nodes in postgres_nodes.
+  when: recovery_op in ['postgres_failover', 'postgres_failback']
+  run_once: true
+  delegate_to: localhost
+  tags: [recovery, preflight]
+
+- name: "[PREFLIGHT] Assert postgres host vars are set"
+  ansible.builtin.assert:
+    that:
+      - postgres_primary_host != ''
+      - postgres_standby_host != ''
+    fail_msg: >
+      PREFLIGHT FAILED: postgres_failover/failback requires:
+        -e "postgres_primary_host=<hostname> postgres_standby_host=<hostname>"
+  when: recovery_op in ['postgres_failover', 'postgres_failback']
+  run_once: true
+  delegate_to: localhost
+  tags: [recovery, preflight]

@@ -1,0 +1,77 @@
+<!-- Managed by Ansible — wazuh-ops. Manual edits will be overwritten. -->
+<!-- Source role : wazuh_configure / Template: ossec.conf.j2            -->
+<ossec_config>
+
+  <global>
+    <jsonout_output>yes</jsonout_output>
+    <alerts_log>yes</alerts_log>
+    <logall>no</logall>
+    <logall_json>no</logall_json>
+    <email_notification>{{ wazuh_email_enabled }}</email_notification>
+    <smtp_server>localhost</smtp_server>
+    <email_from>ossec@{{ ansible_fqdn | default(ansible_hostname) }}</email_from>
+    <email_to>admin@example.com</email_to>
+    <email_maxperhour>12</email_maxperhour>
+    <email_log_source>alerts.log</email_log_source>
+  </global>
+
+  <alerts>
+    <log_alert_level>{{ wazuh_alert_level }}</log_alert_level>
+    <email_alert_level>{{ wazuh_email_alert_level }}</email_alert_level>
+  </alerts>
+
+  <remote>
+    <connection>secure</connection>
+    <port>{{ wazuh_agent_port }}</port>
+    <protocol>tcp</protocol>
+    <allowed-ips>0.0.0.0/0</allowed-ips>
+  </remote>
+
+  <cluster>
+    <name>{{ wazuh_cluster_name }}</name>
+    <node_name>{{ inventory_hostname }}</node_name>
+    <node_type>{{ wazuh_cluster_node_type }}</node_type>
+    <key>{{ vault_wazuh_cluster_key }}</key>
+    <port>{{ wazuh_cluster_port }}</port>
+    <bind_addr>{{ wazuh_cluster_bind_addr }}</bind_addr>
+    <nodes>
+{% for node in wazuh_cluster_nodes %}
+      <node>{{ node }}</node>
+{% endfor %}
+    </nodes>
+    <hidden>no</hidden>
+    <disabled>{{ 'no' if wazuh_cluster_enabled == 'yes' else 'yes' }}</disabled>
+  </cluster>
+
+  <syscheck>
+    <frequency>{{ wazuh_syscheck_frequency }}</frequency>
+    <scan_on_start>yes</scan_on_start>
+{% for dir in wazuh_syscheck_directories %}
+    <directories report_changes="{{ dir.report_changes }}" realtime="{{ dir.realtime }}">{{ dir.path }}</directories>
+{% endfor %}
+  </syscheck>
+
+  <rootcheck>
+    <disabled>no</disabled>
+    <frequency>{{ wazuh_syscheck_frequency }}</frequency>
+  </rootcheck>
+
+{% for lf in wazuh_localfiles %}
+  <localfile>
+    <log_format>{{ lf.log_format }}</log_format>
+    <location>{{ lf.location }}</location>
+  </localfile>
+{% endfor %}
+
+  <vulnerability-detector>
+    <enabled>{{ wazuh_vuln_detector_enabled }}</enabled>
+    <interval>{{ wazuh_vuln_detector_interval }}</interval>
+    <min_full_scan_interval>6h</min_full_scan_interval>
+    <run_on_start>yes</run_on_start>
+    <provider name="nvd">
+      <enabled>yes</enabled>
+      <update_interval>1h</update_interval>
+    </provider>
+  </vulnerability-detector>
+
+</ossec_config>

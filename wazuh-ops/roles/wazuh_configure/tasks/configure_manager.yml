@@ -1,0 +1,23 @@
+---
+# Push ossec.conf to manager nodes and restart the service
+# Tags: configure, configure_manager
+
+- name: Backup existing ossec.conf
+  ansible.builtin.copy:
+    src: "{{ wazuh_config_dir }}/ossec.conf"
+    dest: "{{ wazuh_config_dir }}/ossec.conf.bkp_{{ ansible_date_time.iso8601_basic_short }}"
+    remote_src: true
+    mode: "0640"
+  when: config_backup | bool
+  failed_when: false
+  tags: [configure, configure_manager]
+
+- name: Deploy ossec.conf from template
+  ansible.builtin.template:
+    src: ossec.conf.j2
+    dest: "{{ wazuh_config_dir }}/ossec.conf"
+    owner: root
+    group: ossec
+    mode: "0640"
+  notify: restart manager
+  tags: [configure, configure_manager]

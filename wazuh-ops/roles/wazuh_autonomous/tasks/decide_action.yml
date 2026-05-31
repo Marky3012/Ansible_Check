@@ -1,0 +1,51 @@
+---
+# Decision tree — each branch is a threshold-driven conditional
+# All thresholds are in defaults/main.yml — nothing hardcoded here
+# Tags: autonomous, decide
+
+- name: "[DECIDE] Manager DOWN → trigger recovery (failover)"
+  ansible.builtin.include_role:
+    name: wazuh_recovery
+  vars:
+    op: failover
+  when:
+    - auto_recovery_enabled | bool
+    - manager_down_triggers_recovery | bool
+    - any_manager_down | bool
+  tags: [autonomous, decide]
+
+- name: "[DECIDE] Config drift detected → trigger configure"
+  ansible.builtin.include_role:
+    name: wazuh_configure
+  when:
+    - auto_recovery_enabled | bool
+    - config_drift_triggers_configure | bool
+    - any_config_drift | default(false) | bool
+  tags: [autonomous, decide]
+
+- name: "[DECIDE] Too many agents disconnected → run agent re-enrollment"
+  ansible.builtin.include_tasks: "{{ playbook_dir }}/../playbooks/agent_ops.yml"
+  when:
+    - auto_recovery_enabled | bool
+    - (agent_health.disconnected_count | default(0) | int) > disconnected_agent_threshold
+  failed_when: false
+  tags: [autonomous, decide]
+
+- name: "[DECIDE] Indexer RED → escalate (no auto-recovery for indexer)"
+  ansible.builtin.include_tasks: escalate.yml
+  vars:
+    escalation_reason: "Indexer cluster health is RED — manual shard recovery required"
+  when:
+    - indexer_red_triggers_escalation | bool
+    - indexer_is_red | default(false) | bool
+  tags: [autonomous, decide]
+
+- name: "[DECIDE] All clear — no action required"
+  ansible.builtin.debug:
+    msg: "Autonomous evaluation complete — no critical issues detected, no actions triggered."
+  when:
+    - not (any_manager_down | bool)
+    - not (any_config_drift | default(false) | bool)
+    - not (indexer_is_red | default(false) | bool)
+    - (agent_health.disconnected_count | default(0) | int) <= disconnected_agent_threshold
+  tags: [autonomous, decide]

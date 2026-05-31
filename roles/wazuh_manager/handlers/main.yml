@@ -1,0 +1,16 @@
+---
+# =============================================================================
+# wazuh_manager - Handlers
+# =============================================================================
+# Handlers triggered by configuration changes.
+
+- name: Restart wazuh-manager
+  ansible.builtin.systemd:
+    name: wazuh-manager
+    state: restarted
+    daemon_reload: yes
+
+- name: Reload wazuh-manager
+  ansible.builtin.command: "kill -HUP $(cat /var/ossec/var/run/wazuh-managerd.pid)"
+  args:
+    removes: /var/ossec/var/run/wazuh-managerd.pid

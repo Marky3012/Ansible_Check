@@ -1,0 +1,60 @@
+---
+# ── Wazuh Manager node vars ───────────────────────────────────────────────────
+
+wazuh_manager_service: wazuh-manager
+
+# Cluster — enable for multi-node manager deployments
+wazuh_cluster_enabled: "no"
+wazuh_cluster_name: wazuh-cluster
+# Default node_type — override per-host in hosts.yml for the designated master:
+#   wazuh_cluster_node_type: master
+wazuh_cluster_node_type: worker
+wazuh_cluster_bind_addr: "0.0.0.0"
+wazuh_cluster_nodes:
+  - "{{ ansible_host }}"
+
+# Syscheck (File Integrity Monitoring)
+wazuh_syscheck_frequency: 43200       # 12 hours in seconds
+wazuh_syscheck_directories:
+  - path: /etc
+    report_changes: "yes"
+    realtime: "no"
+  - path: /usr/bin
+    report_changes: "no"
+    realtime: "no"
+  - path: /usr/sbin
+    report_changes: "no"
+    realtime: "no"
+  - path: /bin
+    report_changes: "no"
+    realtime: "no"
+  - path: /sbin
+    report_changes: "no"
+    realtime: "no"
+  - path: /boot
+    report_changes: "no"
+    realtime: "no"
+
+# Vulnerability detector
+wazuh_vuln_detector_enabled: "yes"
+wazuh_vuln_detector_interval: "5m"
+
+# Log collection
+wazuh_localfiles:
+  - location: /var/log/syslog
+    log_format: syslog
+  - location: /var/log/auth.log
+    log_format: syslog
+  - location: /var/log/dpkg.log
+    log_format: syslog
+  - location: "{{ wazuh_log_dir }}/active-responses.log"
+    log_format: syslog
+
+# API
+wazuh_api_host: "0.0.0.0"
+wazuh_api_use_ssl: "true"
+
+# Alert thresholds
+wazuh_alert_level: 3
+wazuh_email_alert_level: 12
+wazuh_email_enabled: "no"

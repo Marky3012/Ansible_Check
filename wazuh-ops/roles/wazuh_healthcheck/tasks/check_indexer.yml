@@ -1,0 +1,36 @@
+---
+# Check Wazuh Indexer (OpenSearch) cluster health
+# Tags: healthcheck, check_indexer
+
+- name: Query OpenSearch cluster health
+  ansible.builtin.uri:
+    url: "http://{{ ansible_host }}:{{ wazuh_indexer_port }}/_cluster/health"
+    method: GET
+    user: "{{ vault_wazuh_indexer_user }}"
+    password: "{{ vault_wazuh_indexer_password }}"
+    force_basic_auth: true
+    timeout: "{{ check_http_timeout }}"
+    return_content: true
+    status_code: [200, 401, -1]
+  register: indexer_health_raw
+  failed_when: false
+  delegate_to: localhost
+  tags: [healthcheck, check_indexer]
+
+- name: Set indexer health fact
+  ansible.builtin.set_fact:
+    indexer_status_entry:
+      host: "{{ inventory_hostname }}"
+      ip: "{{ ansible_host }}"
+      cluster_name: "{{ (indexer_health_raw.json.cluster_name | default('unknown')) }}"
+      cluster_status: "{{ (indexer_health_raw.json.status | default('UNREACHABLE')) }}"
+      active_shards: "{{ (indexer_health_raw.json.active_shards | default(0)) }}"
+      unassigned_shards: "{{ (indexer_health_raw.json.unassigned_shards | default(0)) }}"
+      status: >-
+        {{
+          'DOWN' if indexer_health_raw.status is not defined or indexer_health_raw.status == -1
+          else 'RED' if indexer_health_raw.json.status | default('red') == 'red'
+          else 'WARNING' if indexer_health_raw.json.status | default('yellow') == 'yellow'
+          else 'UP'
+        }}
+  tags: [healthcheck, check_indexer]

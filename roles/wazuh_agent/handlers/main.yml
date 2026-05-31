@@ -1,0 +1,12 @@
+---
+# =============================================================================
+# Wazuh Agent - Handlers
+# =============================================================================
+# Service management handlers triggered by configuration changes.
+# =============================================================================
+
+- name: restart wazuh-agent
+  ansible.builtin.systemd:
+    name: "wazuh-agent"
+    state: restarted
+    daemon_reload: true

@@ -1,0 +1,10 @@
+---
+# ansible-playbook master.yml -e "mode=healthcheck"
+# Safe to run in production at any time — read-only.
+
+- name: Health check — all nodes
+  hosts: all
+  gather_facts: false
+  serial: 1
+  roles:
+    - wazuh_healthcheck

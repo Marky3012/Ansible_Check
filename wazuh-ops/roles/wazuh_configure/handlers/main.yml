@@ -1,0 +1,27 @@
+---
+# Handlers fire only after all tasks in the play complete — safe, sequenced reloads.
+# HAProxy reload is always preceded by config validation (in the task itself).
+
+- name: reload haproxy
+  ansible.builtin.service:
+    name: haproxy
+    state: reloaded
+  listen: reload haproxy
+
+- name: reload keepalived
+  ansible.builtin.service:
+    name: keepalived
+    state: reloaded
+  listen: reload keepalived
+
+- name: restart manager
+  ansible.builtin.service:
+    name: wazuh-manager
+    state: restarted
+  listen: restart manager
+
+- name: restart agent
+  ansible.builtin.service:
+    name: wazuh-agent
+    state: restarted
+  listen: restart agent

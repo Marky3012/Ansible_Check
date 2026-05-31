@@ -1,0 +1,35 @@
+---
+# Check disconnected Wazuh agents via Manager API
+# Runs from the first reachable manager node (delegate pattern)
+# Tags: healthcheck, check_agents
+
+- name: Query disconnected agents from Wazuh API
+  ansible.builtin.uri:
+    url: "https://{{ hostvars[groups['wazuh_managers'][0]]['ansible_host'] }}:{{ wazuh_api_port }}/agents?status=disconnected&limit=500"
+    method: GET
+    user: "{{ vault_wazuh_api_user }}"
+    password: "{{ vault_wazuh_api_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    timeout: "{{ check_http_timeout }}"
+    return_content: true
+  register: agent_disconnect_query
+  failed_when: false
+  run_once: true
+  delegate_to: localhost
+  tags: [healthcheck, check_agents]
+
+- name: Set agent health fact
+  ansible.builtin.set_fact:
+    agent_health:
+      disconnected_count: "{{ (agent_disconnect_query.json.data.total_affected_items | default(0)) | int }}"
+      api_reachable: "{{ agent_disconnect_query.status is defined and agent_disconnect_query.status == 200 }}"
+      status: >-
+        {{
+          'CRITICAL' if (agent_disconnect_query.json.data.total_affected_items | default(0) | int) >= agent_disconnect_critical_threshold
+          else 'WARNING' if (agent_disconnect_query.json.data.total_affected_items | default(0) | int) >= agent_disconnect_warning_threshold
+          else 'OK'
+        }}
+  run_once: true
+  delegate_to: localhost
+  tags: [healthcheck, check_agents]

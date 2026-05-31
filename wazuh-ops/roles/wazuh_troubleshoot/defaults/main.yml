@@ -1,0 +1,20 @@
+---
+# ── wazuh_troubleshoot defaults ───────────────────────────────────────────────
+# This role is READ-ONLY — it never restarts services or modifies config.
+
+# How many lines of logs to collect per service
+log_lines_to_collect: 500
+
+# Ports to probe for open/closed status
+ports_to_check:
+  - { name: "agent_comms",  port: "{{ wazuh_agent_port }}" }
+  - { name: "enrollment",   port: "{{ wazuh_enrollment_port }}" }
+  - { name: "api",          port: "{{ wazuh_api_port }}" }
+  - { name: "indexer_http", port: "{{ wazuh_indexer_port }}" }
+  - { name: "haproxy_vip",  host: "{{ keepalived_virtual_ip | default(ansible_host) }}", port: "{{ wazuh_agent_port }}" }
+
+# Local temp directory for fetched artifacts (on the control node)
+troubleshoot_fetch_dir: "{{ report_dir }}/troubleshoot_{{ ansible_date_time.iso8601_basic_short }}"
+
+# Bundle the fetched directory into a tarball
+bundle_artifacts: true

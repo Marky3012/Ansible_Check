@@ -1,0 +1,29 @@
+---
+# =============================================================================
+# Wazuh Agent - Role Metadata
+# =============================================================================
+
+galaxy_info:
+  role_name: wazuh_agent
+  author: "TechBridge"
+  description: "Install and configure Wazuh Agent 4.11.2"
+  license: "MIT"
+  min_ansible_version: "2.14"
+
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble  # 24.04
+    - name: EL  # RHEL / CentOS / Rocky / Alma
+      versions:
+        - "8"
+        - "9"
+
+  galaxy_tags:
+    - wazuh
+    - agent
+    - security
+    - siem
+    - monitoring
+
+dependencies: []

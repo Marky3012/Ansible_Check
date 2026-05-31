@@ -1,0 +1,46 @@
+---
+# STAGE 2 — INVOKE FAILBACK
+# Copies failback_wrapper.sh to the BACKUP node (new primary after failback) and runs it.
+# Hard abort if exit code != 0.
+# Tags: recovery, invoke, failback
+
+- name: "[INVOKE] Ensure scripts directory exists on target"
+  ansible.builtin.file:
+    path: "{{ recovery_scripts_dest_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  when: not (preflight_vip_present | bool)
+  tags: [recovery, invoke, failback]
+
+- name: "[INVOKE] Copy failback_wrapper.sh to BACKUP node"
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../scripts/wrappers/{{ failback_wrapper }}"
+    dest: "{{ recovery_scripts_dest_dir }}/{{ failback_wrapper }}"
+    owner: root
+    group: root
+    mode: "0750"
+  when: not (preflight_vip_present | bool)
+  tags: [recovery, invoke, failback]
+
+- name: "[INVOKE] Execute failback wrapper on BACKUP node"
+  ansible.builtin.command:
+    cmd: "{{ recovery_scripts_dest_dir }}/{{ failback_wrapper }}"
+  register: failback_result
+  when: not (preflight_vip_present | bool)
+  async: "{{ recovery_script_timeout }}"
+  poll: 5
+  tags: [recovery, invoke, failback]
+
+- name: "[INVOKE] GATE — Abort if failback script exited non-zero"
+  ansible.builtin.fail:
+    msg: |
+      INVOKE GATE FAILED: failback_wrapper.sh exited {{ failback_result.rc }}.
+      stdout: {{ failback_result.stdout | default('') }}
+      stderr: {{ failback_result.stderr | default('') }}
+  when:
+    - not (preflight_vip_present | bool)
+    - failback_result.rc is defined
+    - failback_result.rc != 0
+  tags: [recovery, invoke, failback]

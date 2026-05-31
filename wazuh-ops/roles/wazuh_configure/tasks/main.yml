@@ -1,0 +1,36 @@
+---
+# wazuh_configure — dispatches to component-specific config tasks
+# All config changes use validate-before-deploy + handlers for safe reloads.
+
+- name: Gather minimal facts
+  ansible.builtin.setup:
+    gather_subset: [min]
+  tags: [configure]
+
+- name: Configure HAProxy
+  ansible.builtin.include_tasks: configure_haproxy.yml
+  when:
+    - configure_haproxy | bool
+    - inventory_hostname in groups['haproxy_nodes']
+  tags: [configure, configure_haproxy]
+
+- name: Configure Keepalived
+  ansible.builtin.include_tasks: configure_keepalived.yml
+  when:
+    - configure_keepalived | bool
+    - inventory_hostname in groups['haproxy_nodes']
+  tags: [configure, configure_keepalived]
+
+- name: Configure Manager
+  ansible.builtin.include_tasks: configure_manager.yml
+  when:
+    - configure_manager | bool
+    - inventory_hostname in groups['wazuh_managers']
+  tags: [configure, configure_manager]
+
+- name: Configure Agents
+  ansible.builtin.include_tasks: configure_agents.yml
+  when:
+    - configure_agents | bool
+    - inventory_hostname in groups['wazuh_agents']
+  tags: [configure, configure_agents]

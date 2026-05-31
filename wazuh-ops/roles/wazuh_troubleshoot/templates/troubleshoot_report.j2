@@ -1,0 +1,33 @@
+================================================================================
+  TROUBLESHOOT REPORT — {{ inventory_hostname }}
+  Generated : {{ ansible_date_time.iso8601 }}
+================================================================================
+
+PORT STATUS
+───────────
+{% for name, info in (port_status | default({})).items() %}
+  {{ "%-20s" | format(name) }} {{ info.host }}:{{ info.port }}  {{ 'OPEN' if info.open else 'CLOSED' }}
+{% else %}
+  (port check not run)
+{% endfor %}
+
+CONFIG DRIFT
+────────────
+{% if config_drift is defined %}
+  HAProxy    : {{ 'DRIFTED' if config_drift.haproxy.drifted else 'IN SYNC' }}
+{% if config_drift.haproxy.drifted %}
+{{ config_drift.haproxy.diff | indent(4, true) }}
+{% endif %}
+  Keepalived : {{ 'DRIFTED' if config_drift.keepalived.drifted else 'IN SYNC' }}
+{% if config_drift.keepalived.drifted %}
+{{ config_drift.keepalived.diff | indent(4, true) }}
+{% endif %}
+{% else %}
+  (drift detection not run on this host)
+{% endif %}
+
+ARTIFACT LOCATION
+─────────────────
+  {{ troubleshoot_fetch_dir }}/{{ inventory_hostname }}/
+
+================================================================================

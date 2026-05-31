@@ -1,0 +1,11 @@
+---
+# ansible-playbook master.yml -e "mode=troubleshoot"
+# Collects logs, checks ports, detects drift, bundles artifact.
+# Read-only — safe to run in production at any time.
+
+- name: Troubleshoot — all nodes
+  hosts: all
+  gather_facts: false
+  serial: 1
+  roles:
+    - wazuh_troubleshoot

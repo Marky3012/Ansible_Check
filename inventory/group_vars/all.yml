@@ -1,0 +1,124 @@
+---
+# =============================================================================
+# Global Variables for Wazuh 4.11.2 Ansible Project
+# Target OS: Ubuntu 24.04 / RHEL
+#
+# These variables are shared across ALL host groups (manager, indexer, agents).
+# Sensitive values marked with 'CHANGE_ME' should be encrypted with:
+#   ansible-vault encrypt_string '<value>' --name '<variable_name>'
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Wazuh Version
+# ---------------------------------------------------------------------------
+# The target Wazuh version to install/manage
+wazuh_version: '4.11.2'
+
+# ---------------------------------------------------------------------------
+# Network Ports
+# ---------------------------------------------------------------------------
+# Port for agent-manager communication (events)
+wazuh_manager_port: 1514
+
+# Port for agent registration/enrollment
+wazuh_registration_port: 1515
+
+# Port for manager cluster communication (inter-node)
+wazuh_cluster_port: 1516
+
+# Port for the Wazuh RESTful API
+wazuh_api_port: 55000
+
+# Port for the Wazuh Indexer (OpenSearch)
+wazuh_indexer_port: 9200
+
+# ---------------------------------------------------------------------------
+# API Credentials
+# ---------------------------------------------------------------------------
+# Wazuh API user (used by the web UI and API consumers)
+wazuh_api_user: 'wazuh-wui'
+
+# Wazuh API password — CHANGE_ME: encrypt with ansible-vault in production
+wazuh_api_password: 'CHANGE_ME'  # USE ansible-vault: ansible-vault encrypt_string
+
+# ---------------------------------------------------------------------------
+# Cluster Configuration
+# ---------------------------------------------------------------------------
+# Name of the Wazuh manager cluster
+wazuh_cluster_name: 'wazuh-cluster'
+
+# Shared secret key for cluster node authentication
+# CHANGE_ME: encrypt with ansible-vault in production
+wazuh_cluster_key: 'CHANGE_ME'  # USE ansible-vault: ansible-vault encrypt_string
+
+# ---------------------------------------------------------------------------
+# Repository Configuration — Debian / Ubuntu
+# ---------------------------------------------------------------------------
+# GPG key URL for verifying Wazuh packages on Debian-based systems
+wazuh_repo_gpg_key_url_deb: 'https://packages.wazuh.com/key/GPG-KEY-WAZUH'
+
+# APT repository URL for Wazuh packages
+wazuh_repo_url_deb: 'https://packages.wazuh.com/4.x/apt/'
+
+# APT repository entry (for sources.list)
+wazuh_repo_entry_deb: "deb https://packages.wazuh.com/4.x/apt/ stable main"
+
+# ---------------------------------------------------------------------------
+# Repository Configuration — RHEL / CentOS
+# ---------------------------------------------------------------------------
+# GPG key URL for verifying Wazuh packages on RHEL-based systems
+wazuh_repo_gpg_key_url_rpm: 'https://packages.wazuh.com/key/GPG-KEY-WAZUH'
+
+# YUM/DNF repository base URL for Wazuh packages
+wazuh_repo_url_rpm: 'https://packages.wazuh.com/4.x/yum/'
+
+# ---------------------------------------------------------------------------
+# Common File Paths
+# ---------------------------------------------------------------------------
+# Wazuh installation base directory (OSSEC root)
+wazuh_dir: '/var/ossec'
+
+# Wazuh configuration directory
+wazuh_config_dir: '/var/ossec/etc'
+
+# Wazuh log directory
+wazuh_log_dir: '/var/ossec/logs'
+
+# Wazuh rules directory (custom and default)
+wazuh_rules_dir: '/var/ossec/ruleset/rules'
+
+# Wazuh decoders directory
+wazuh_decoders_dir: '/var/ossec/ruleset/decoders'
+
+# Wazuh active response scripts directory
+wazuh_active_response_dir: '/var/ossec/active-response/bin'
+
+# Wazuh shared agent configuration directory
+wazuh_shared_dir: '/var/ossec/etc/shared'
+
+# General Wazuh log file path
+wazuh_log_file: '/var/ossec/logs/ossec.log'
+
+# Wazuh alerts log (JSON format)
+wazuh_alerts_log: '/var/ossec/logs/alerts/alerts.json'
+
+# Wazuh Indexer data directory
+wazuh_indexer_data_dir: '/var/lib/wazuh-indexer'
+
+# Wazuh Indexer log directory
+wazuh_indexer_log_dir: '/var/log/wazuh-indexer'
+
+# ---------------------------------------------------------------------------
+# Report / Output
+# ---------------------------------------------------------------------------
+# Directory where troubleshooting and diagnostic reports are written
+report_output_dir: '/tmp/wazuh_reports'
+
+# ---------------------------------------------------------------------------
+# Common Settings
+# ---------------------------------------------------------------------------
+# Timezone to configure on managed hosts (optional, used by some playbooks)
+wazuh_timezone: 'UTC'
+
+# Whether to automatically restart Wazuh services after configuration changes
+wazuh_auto_restart: true

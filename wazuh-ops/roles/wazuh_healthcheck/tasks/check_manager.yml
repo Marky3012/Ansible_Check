@@ -1,0 +1,43 @@
+---
+# Check Wazuh Manager: TCP reachability + API availability
+# Tags: healthcheck, check_manager
+
+- name: Check manager agent port TCP reachability
+  ansible.builtin.wait_for:
+    host: "{{ ansible_host }}"
+    port: "{{ wazuh_agent_port }}"
+    timeout: "{{ check_tcp_timeout }}"
+    state: started
+  register: manager_tcp_check
+  failed_when: false
+  delegate_to: localhost
+  tags: [healthcheck, check_manager]
+
+- name: Check Wazuh Manager API availability
+  ansible.builtin.uri:
+    url: "https://{{ ansible_host }}:{{ wazuh_api_port }}/"
+    method: GET
+    user: "{{ vault_wazuh_api_user }}"
+    password: "{{ vault_wazuh_api_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    timeout: "{{ check_http_timeout }}"
+    status_code: [200, 401]
+  register: manager_api_check
+  failed_when: false
+  delegate_to: localhost
+  tags: [healthcheck, check_manager]
+
+- name: Set manager health fact
+  ansible.builtin.set_fact:
+    manager_status_entry:
+      host: "{{ inventory_hostname }}"
+      ip: "{{ ansible_host }}"
+      tcp_port_open: "{{ manager_tcp_check.state is defined and manager_tcp_check.state == 'started' }}"
+      api_reachable: "{{ manager_api_check.status is defined and manager_api_check.status in [200, 401] }}"
+      status: >-
+        {{
+          'UP' if (manager_tcp_check.state is defined and manager_tcp_check.state == 'started')
+          else 'DOWN'
+        }}
+  tags: [healthcheck, check_manager]

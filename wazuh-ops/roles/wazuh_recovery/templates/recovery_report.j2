@@ -1,0 +1,34 @@
+================================================================================
+  RECOVERY REPORT — {{ recovery_op | upper }}
+  Host      : {{ inventory_hostname }}
+  Generated : {{ ansible_date_time.iso8601 }}
+================================================================================
+
+OPERATION  : {{ recovery_op | upper }}
+OUTCOME    : {{ 'SUCCESS' if (recovery_validation.haproxy_active | default(false)) else 'FAILED' }}
+
+PREFLIGHT
+─────────
+  HAProxy active  : {{ preflight_haproxy_active.rc | default('N/A') == 0 }}
+  Keepalived up   : {{ preflight_keepalived_active.rc | default('N/A') == 0 }}
+  VIP present     : {{ preflight_vip_present | default('N/A') }}
+
+INVOKE
+──────
+{% if recovery_op == 'failover' %}
+  Script exit code : {{ failover_result.rc | default('N/A') }}
+  stdout           : {{ failover_result.stdout | default('(empty)') | truncate(200) }}
+  stderr           : {{ failover_result.stderr | default('(empty)') | truncate(200) }}
+{% else %}
+  Script exit code : {{ failback_result.rc | default('N/A') }}
+  stdout           : {{ failback_result.stdout | default('(empty)') | truncate(200) }}
+  stderr           : {{ failback_result.stderr | default('(empty)') | truncate(200) }}
+{% endif %}
+
+VALIDATION
+──────────
+  HAProxy active   : {{ recovery_validation.haproxy_active | default(false) }}
+  VIP present      : {{ recovery_validation.vip_present | default(false) }}
+  Backends up      : {{ recovery_validation.backends_up | default(false) }}
+
+================================================================================

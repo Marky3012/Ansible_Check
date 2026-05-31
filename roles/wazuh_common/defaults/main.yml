@@ -1,0 +1,60 @@
+---
+# =============================================================================
+# wazuh_common - Default Variables
+# =============================================================================
+# Common configuration shared across all Wazuh components (manager, agent, etc.)
+# These defaults can be overridden in group_vars, host_vars, or playbook vars.
+
+# ---------------------------------------------------------------------------
+# Wazuh version
+# ---------------------------------------------------------------------------
+wazuh_version: '4.11.2'
+wazuh_major_version: '4.x'
+
+# ---------------------------------------------------------------------------
+# OS-specific prerequisite packages
+# ---------------------------------------------------------------------------
+# Debian/Ubuntu prerequisites
+wazuh_common_packages_debian:
+  - curl
+  - apt-transport-https
+  - lsb-release
+  - gnupg2
+
+# RedHat/CentOS/RHEL prerequisites
+wazuh_common_packages_redhat:
+  - curl
+  - policycoreutils-python-utils
+
+# ---------------------------------------------------------------------------
+# Repository configuration
+# ---------------------------------------------------------------------------
+wazuh_repo_gpg_key_url: 'https://packages.wazuh.com/key/GPG-KEY-WAZUH'
+
+# Debian repository
+wazuh_repo_apt_url: 'deb https://packages.wazuh.com/4.x/apt/ stable main'
+
+# RedHat repository
+wazuh_repo_yum_url: 'https://packages.wazuh.com/4.x/yum/'
+
+# ---------------------------------------------------------------------------
+# Firewall configuration
+# ---------------------------------------------------------------------------
+firewall_enabled: false
+
+# Common ports used by Wazuh components
+wazuh_common_ports:
+  - { port: 1514, proto: 'tcp', description: 'Wazuh agent communication' }
+  - { port: 1515, proto: 'tcp', description: 'Wazuh agent enrollment' }
+  - { port: 55000, proto: 'tcp', description: 'Wazuh API' }
+  - { port: 1516, proto: 'tcp', description: 'Wazuh cluster daemon' }
+
+# ---------------------------------------------------------------------------
+# Common directories
+# ---------------------------------------------------------------------------
+wazuh_dir: '/var/ossec'
+wazuh_common_directories:
+  - "{{ wazuh_dir }}/etc"
+  - "{{ wazuh_dir }}/logs"
+  - "{{ wazuh_dir }}/queue"
+  - "{{ wazuh_dir }}/var/run"

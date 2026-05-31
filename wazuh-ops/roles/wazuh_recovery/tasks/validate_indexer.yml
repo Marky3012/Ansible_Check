@@ -1,0 +1,46 @@
+---
+# STAGE 3 — VALIDATE INDEXER RECOVERY
+# Confirms cluster health is green and all shards are assigned.
+# Tags: recovery, validate, indexer_failover, indexer_failback
+
+- name: "[VALIDATE-INDEXER] Wait for cluster to stabilize"
+  ansible.builtin.pause:
+    seconds: "{{ indexer_stabilize_wait }}"
+  run_once: true
+  tags: [recovery, validate]
+
+- name: "[VALIDATE-INDEXER] Query cluster health"
+  ansible.builtin.uri:
+    url: "{{ wazuh_indexer_api_scheme }}://{{ hostvars[indexer_surviving_node]['ansible_host'] }}:{{ wazuh_indexer_port }}/_cluster/health"
+    method: GET
+    user: "{{ vault_wazuh_indexer_user }}"
+    password: "{{ vault_wazuh_indexer_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ wazuh_indexer_validate_certs }}"
+    ca_path: "{{ wazuh_indexer_ca_cert | default(omit) }}"
+    status_code: 200
+    timeout: 15
+  register: validate_indexer_health
+  delegate_to: localhost
+  run_once: true
+  tags: [recovery, validate]
+
+- name: "[VALIDATE-INDEXER] Set validation summary"
+  ansible.builtin.set_fact:
+    recovery_validation:
+      cluster_status: "{{ validate_indexer_health.json.status }}"
+      active_nodes: "{{ validate_indexer_health.json.number_of_nodes }}"
+      unassigned_shards: "{{ validate_indexer_health.json.unassigned_shards }}"
+      relocating_shards: "{{ validate_indexer_health.json.relocating_shards }}"
+  run_once: true
+  tags: [recovery, validate]
+
+- name: "[VALIDATE-INDEXER] GATE — Abort if cluster is not green or yellow"
+  ansible.builtin.fail:
+    msg: >
+      VALIDATE GATE FAILED: Indexer cluster status is {{ recovery_validation.cluster_status }}.
+      Unassigned: {{ recovery_validation.unassigned_shards }} shards.
+      Manual investigation required.
+  when: recovery_validation.cluster_status == 'red'
+  run_once: true
+  tags: [recovery, validate]

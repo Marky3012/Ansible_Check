@@ -1,0 +1,58 @@
+---
+# ── wazuh_recovery defaults ───────────────────────────────────────────────────
+
+# op must be passed at runtime: -e "op=failover" or -e "op=failback"
+# No default — the play fails fast if op is not set (validated in main.yml)
+recovery_op: "{{ op | default('') }}"
+
+# Path on the target node where wrapper scripts are deployed
+recovery_scripts_dest_dir: /opt/wazuh-ops
+
+# Wrapper script names (relative to scripts/wrappers/ in this repo)
+failover_wrapper: failover_wrapper.sh
+failback_wrapper: failback_wrapper.sh
+
+# Timeout (seconds) for wrapper script execution
+recovery_script_timeout: 120
+
+# Post-recovery validation: how long to wait for HAProxy to stabilize
+recovery_stabilize_wait: 10
+
+# Notification target inherits from group_vars/all.yml (notification_target)
+
+# ── Indexer HA ────────────────────────────────────────────────────────────────
+# Wrapper script names
+indexer_failover_wrapper: indexer_failover_wrapper.sh
+indexer_failback_wrapper: indexer_failback_wrapper.sh
+
+# Runtime vars — must be passed at invocation
+indexer_failing_node: ""       # OpenSearch node name of the failing node (failover)
+indexer_returning_node: ""     # Inventory hostname of the returning node (failback)
+indexer_surviving_node: ""     # Inventory hostname of a healthy node (used for API calls)
+
+# Timeouts
+indexer_shard_drain_timeout: 120   # seconds to wait for shard reallocation
+indexer_stabilize_wait: 30         # seconds to wait before validate
+indexer_join_timeout: 120          # seconds to wait for node to rejoin on failback
+
+# ── Manager HA ────────────────────────────────────────────────────────────────
+manager_promote_wrapper: manager_promote_wrapper.sh
+manager_demote_wrapper: manager_demote_wrapper.sh
+
+# Runtime vars — auto-discovered from Wazuh API; override if master is unreachable
+manager_original_master: ""        # Inventory hostname of the original/fenced master
+manager_promote_candidate: ""      # Inventory hostname of the worker to promote
+
+manager_ossec_conf: /var/ossec/etc/ossec.conf
+manager_stabilize_wait: 20         # seconds after promote before validate
+
+# ── Postgres HA ───────────────────────────────────────────────────────────────
+postgres_promote_wrapper: postgres_promote_wrapper.sh
+postgres_rejoin_wrapper: postgres_rejoin_wrapper.sh
+
+# Runtime vars — must be passed at invocation
+postgres_primary_host: ""          # Inventory hostname of the current/old primary
+postgres_standby_host: ""          # Inventory hostname of the standby being promoted/rejoining
+
+postgres_stabilize_wait: 15        # seconds after promote before validate
+postgres_max_lag_bytes: 1048576    # 1 MiB — warn in validate if lag exceeds this

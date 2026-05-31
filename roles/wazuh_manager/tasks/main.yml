@@ -1,0 +1,107 @@
+---
+# =============================================================================
+# wazuh_manager - Tasks
+# =============================================================================
+# Installs and configures the Wazuh Manager service.
+# Depends on wazuh_common for repo/prereqs.
+
+# ---------------------------------------------------------------------------
+# 1. Include wazuh_common role
+# ---------------------------------------------------------------------------
+- name: Include wazuh_common role for prerequisites and repository
+  ansible.builtin.include_role:
+    name: wazuh_common
+  tags:
+    - always
+
+# ---------------------------------------------------------------------------
+# 2. Install the wazuh-manager package
+# ---------------------------------------------------------------------------
+- name: Install wazuh-manager package (Debian/Ubuntu)
+  ansible.builtin.apt:
+    name: "{{ wazuh_manager_package }}={{ wazuh_version }}-*"
+    state: present
+    update_cache: yes
+  when: ansible_os_family == 'Debian'
+  tags:
+    - install
+
+- name: Install wazuh-manager package (RedHat/CentOS)
+  ansible.builtin.yum:
+    name: "{{ wazuh_manager_package }}-{{ wazuh_version }}"
+    state: present
+  when: ansible_os_family == 'RedHat'
+  tags:
+    - install
+
+# ---------------------------------------------------------------------------
+# 3. Template ossec.conf
+# ---------------------------------------------------------------------------
+- name: Deploy Wazuh Manager ossec.conf from template
+  ansible.builtin.template:
+    src: ossec.conf.j2
+    dest: "{{ wazuh_dir }}/etc/ossec.conf"
+    owner: root
+    group: wazuh
+    mode: '0640'
+    backup: yes
+    validate: "{{ wazuh_dir }}/bin/verify-agent-conf"
+  notify:
+    - Restart wazuh-manager
+  tags:
+    - configure
+
+# ---------------------------------------------------------------------------
+# 4. Ensure wazuh-manager service is enabled and started
+# ---------------------------------------------------------------------------
+- name: Ensure wazuh-manager service is enabled and started
+  ansible.builtin.systemd:
+    name: wazuh-manager
+    enabled: "{{ wazuh_manager_service_enabled }}"
+    state: "{{ wazuh_manager_service_state }}"
+    daemon_reload: yes
+  tags:
+    - service
+
+# ---------------------------------------------------------------------------
+# 5. Wait for Wazuh API to be available
+# ---------------------------------------------------------------------------
+- name: Wait for Wazuh API to become available
+  ansible.builtin.uri:
+    url: "https://localhost:{{ wazuh_manager_api_port }}"
+    method: GET
+    validate_certs: no
+    status_code:
+      - 200
+      - 401   # 401 is expected when no credentials are sent
+  register: wazuh_api_check
+  until: wazuh_api_check.status in [200, 401]
+  retries: "{{ wazuh_manager_api_wait_retries }}"
+  delay: "{{ wazuh_manager_api_wait_delay }}"
+  tags:
+    - service
+
+# ---------------------------------------------------------------------------
+# 6. Configure Wazuh API user (optional)
+# ---------------------------------------------------------------------------
+- name: Configure Wazuh API user
+  ansible.builtin.uri:
+    url: "https://localhost:{{ wazuh_manager_api_port }}/security/users"
+    method: POST
+    user: 'wazuh'
+    password: 'wazuh'
+    force_basic_auth: yes
+    validate_certs: no
+    body_format: json
+    body:
+      username: "{{ wazuh_manager_api_user }}"
+      password: "{{ wazuh_manager_api_password }}"
+    status_code:
+      - 200
+      - 400   # User already exists
+  when:
+    - wazuh_manager_api_user | length > 0
+    - wazuh_manager_api_password | length > 0
+  no_log: true
+  tags:
+    - configure

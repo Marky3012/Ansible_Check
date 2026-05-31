@@ -1,0 +1,17 @@
+---
+# =============================================================================
+# Wazuh Indexer - Handlers
+# =============================================================================
+# Service management handlers triggered by configuration changes.
+# =============================================================================
+
+- name: restart wazuh-indexer
+  ansible.builtin.systemd:
+    name: "wazuh-indexer"
+    state: restarted
+    daemon_reload: true
+
+- name: reload wazuh-indexer
+  ansible.builtin.systemd:
+    name: "wazuh-indexer"
+    state: reloaded

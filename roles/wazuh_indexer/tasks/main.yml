@@ -1,0 +1,211 @@
+---
+# =============================================================================
+# Wazuh Indexer - Main Tasks
+# =============================================================================
+# Installs, configures, and manages the Wazuh Indexer (OpenSearch) service.
+# Supports Ubuntu 24.04 and RHEL-based distributions.
+# Wazuh version: 4.11.2
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# 1. Repository Setup & Package Installation
+# ---------------------------------------------------------------------------
+
+- name: Import Wazuh GPG key (Debian/Ubuntu)
+  ansible.builtin.apt_key:
+    url: "https://packages.wazuh.com/key/GPG-KEY-WAZUH"
+    state: present
+  when: ansible_os_family == "Debian"
+  tags:
+    - install
+
+- name: Add Wazuh repository (Debian/Ubuntu)
+  ansible.builtin.apt_repository:
+    repo: "deb https://packages.wazuh.com/4.x/apt/ stable main"
+    state: present
+    filename: "wazuh"
+    update_cache: true
+  when: ansible_os_family == "Debian"
+  tags:
+    - install
+
+- name: Import Wazuh GPG key (RedHat/CentOS)
+  ansible.builtin.rpm_key:
+    key: "https://packages.wazuh.com/key/GPG-KEY-WAZUH"
+    state: present
+  when: ansible_os_family == "RedHat"
+  tags:
+    - install
+
+- name: Add Wazuh repository (RedHat/CentOS)
+  ansible.builtin.yum_repository:
+    name: "wazuh"
+    description: "Wazuh repository"
+    baseurl: "https://packages.wazuh.com/4.x/yum/"
+    gpgcheck: true
+    gpgkey: "https://packages.wazuh.com/key/GPG-KEY-WAZUH"
+    enabled: true
+  when: ansible_os_family == "RedHat"
+  tags:
+    - install
+
+- name: Install wazuh-indexer package (Debian/Ubuntu)
+  ansible.builtin.apt:
+    name: "wazuh-indexer={{ wazuh_indexer_version }}-*"
+    state: present
+    update_cache: true
+  when: ansible_os_family == "Debian"
+  tags:
+    - install
+
+- name: Install wazuh-indexer package (RedHat/CentOS)
+  ansible.builtin.yum:
+    name: "wazuh-indexer-{{ wazuh_indexer_version }}"
+    state: present
+  when: ansible_os_family == "RedHat"
+  tags:
+    - install
+
+# ---------------------------------------------------------------------------
+# 2. Configuration
+# ---------------------------------------------------------------------------
+
+- name: Template opensearch.yml configuration
+  ansible.builtin.template:
+    src: "opensearch.yml.j2"
+    dest: "/etc/wazuh-indexer/opensearch.yml"
+    owner: "wazuh-indexer"
+    group: "wazuh-indexer"
+    mode: "0640"
+    backup: true
+  notify:
+    - restart wazuh-indexer
+  tags:
+    - configure
+
+- name: Set JVM heap size (Xms)
+  ansible.builtin.lineinfile:
+    path: "/etc/wazuh-indexer/jvm.options"
+    regexp: "^-Xms"
+    line: "-Xms{{ wazuh_indexer_jvm_heap_size }}"
+    backup: true
+  notify:
+    - restart wazuh-indexer
+  tags:
+    - configure
+
+- name: Set JVM heap size (Xmx)
+  ansible.builtin.lineinfile:
+    path: "/etc/wazuh-indexer/jvm.options"
+    regexp: "^-Xmx"
+    line: "-Xmx{{ wazuh_indexer_jvm_heap_size }}"
+    backup: true
+  notify:
+    - restart wazuh-indexer
+  tags:
+    - configure
+
+# ---------------------------------------------------------------------------
+# 3. File Ownership & Permissions
+# ---------------------------------------------------------------------------
+
+- name: Set ownership on data directory
+  ansible.builtin.file:
+    path: "{{ wazuh_indexer_path_data }}"
+    state: directory
+    owner: "wazuh-indexer"
+    group: "wazuh-indexer"
+    mode: "0750"
+    recurse: true
+  tags:
+    - configure
+
+- name: Set ownership on log directory
+  ansible.builtin.file:
+    path: "{{ wazuh_indexer_path_logs }}"
+    state: directory
+    owner: "wazuh-indexer"
+    group: "wazuh-indexer"
+    mode: "0750"
+    recurse: true
+  tags:
+    - configure
+
+- name: Set ownership on configuration directory
+  ansible.builtin.file:
+    path: "/etc/wazuh-indexer"
+    state: directory
+    owner: "wazuh-indexer"
+    group: "wazuh-indexer"
+    mode: "0750"
+    recurse: true
+  tags:
+    - configure
+
+# ---------------------------------------------------------------------------
+# 4. Service Management
+# ---------------------------------------------------------------------------
+
+- name: Enable and start wazuh-indexer service
+  ansible.builtin.systemd:
+    name: "wazuh-indexer"
+    enabled: "{{ wazuh_indexer_service_enabled }}"
+    state: "{{ wazuh_indexer_service_state }}"
+    daemon_reload: true
+  tags:
+    - service
+
+- name: Wait for wazuh-indexer to be ready on port {{ wazuh_indexer_http_port }}
+  ansible.builtin.wait_for:
+    host: "127.0.0.1"
+    port: "{{ wazuh_indexer_http_port }}"
+    delay: 10
+    timeout: 120
+    state: started
+  tags:
+    - service
+
+# ---------------------------------------------------------------------------
+# 5. Security Initialization
+# ---------------------------------------------------------------------------
+
+- name: Check if security plugin needs initialization
+  ansible.builtin.stat:
+    path: "/etc/wazuh-indexer/.security_initialized"
+  register: _security_initialized
+  when: wazuh_indexer_security_enabled | bool
+  tags:
+    - security
+
+- name: Initialize security plugin (securityadmin.sh)
+  ansible.builtin.command:
+    cmd: >
+      {{ wazuh_indexer_securityadmin_path }}
+      -cd /etc/wazuh-indexer/opensearch-security/
+      -nhnv
+      -cacert {{ wazuh_indexer_ssl_transport_pemtrustedcas }}
+      -cert {{ wazuh_indexer_admin_pemcert }}
+      -key {{ wazuh_indexer_admin_pemkey }}
+      -h 127.0.0.1
+      -p {{ wazuh_indexer_transport_port }}
+  register: _securityadmin_result
+  changed_when: _securityadmin_result.rc == 0
+  when:
+    - wazuh_indexer_security_enabled | bool
+    - not (_security_initialized.stat.exists | default(false))
+  tags:
+    - security
+
+- name: Mark security as initialized
+  ansible.builtin.file:
+    path: "/etc/wazuh-indexer/.security_initialized"
+    state: touch
+    owner: "wazuh-indexer"
+    group: "wazuh-indexer"
+    mode: "0640"
+  when:
+    - wazuh_indexer_security_enabled | bool
+    - _securityadmin_result is defined
+    - _securityadmin_result.rc | default(1) == 0
+  tags:
+    - security

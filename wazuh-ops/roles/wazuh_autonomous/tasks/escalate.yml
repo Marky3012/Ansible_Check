@@ -1,0 +1,55 @@
+---
+# Escalation — write report, notify, then halt the play
+# Called when auto-recovery is not possible or has failed
+# Tags: autonomous, escalate
+
+- name: "[ESCALATE] Ensure reports directory exists"
+  ansible.builtin.file:
+    path: "{{ report_dir }}"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  run_once: true
+  tags: [autonomous, escalate]
+
+- name: "[ESCALATE] Write escalation report"
+  ansible.builtin.copy:
+    content: "{{ {'event': 'escalation', 'reason': escalation_reason | default('unspecified'), 'timestamp': ansible_date_time.iso8601, 'health_summary': health_summary | default({})} | to_nice_json }}"
+    dest: "{{ escalation_report_path }}"
+    mode: "0644"
+  delegate_to: localhost
+  run_once: true
+  tags: [autonomous, escalate]
+
+- name: "[ESCALATE] Send notification"
+  ansible.builtin.uri:
+    url: "{{ vault_notification_webhook }}"
+    method: POST
+    body_format: json
+    body:
+      text: |
+        *ESCALATION — Manual Intervention Required*
+        Reason    : {{ escalation_reason | default('unspecified') }}
+        Timestamp : {{ ansible_date_time.iso8601 }}
+        Report    : {{ escalation_report_path }}
+    status_code: 200
+  when:
+    - notification_target == 'slack'
+    - vault_notification_webhook != 'VAULT_PLACEHOLDER'
+  run_once: true
+  delegate_to: localhost
+  failed_when: false
+  tags: [autonomous, escalate]
+
+- name: "[ESCALATE] Log escalation (fallback)"
+  ansible.builtin.debug:
+    msg: "ESCALATION: {{ escalation_reason | default('unspecified') }} | Report: {{ escalation_report_path }}"
+  when: notification_target != 'slack'
+  run_once: true
+  tags: [autonomous, escalate]
+
+- name: "[ESCALATE] Halt play — manual intervention required"
+  ansible.builtin.fail:
+    msg: "Autonomous escalation triggered: {{ escalation_reason | default('unspecified') }}. See {{ escalation_report_path }}"
+  run_once: true
+  tags: [autonomous, escalate]

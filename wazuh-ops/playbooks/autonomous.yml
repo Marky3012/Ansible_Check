@@ -1,0 +1,10 @@
+---
+# ansible-playbook master.yml -e "mode=autonomous"
+# Full self-healing run — evaluates all nodes, decides actions, escalates if needed.
+# Run from cron or triggered by an alert.
+
+- name: Autonomous self-healing
+  hosts: localhost
+  gather_facts: false
+  roles:
+    - wazuh_autonomous

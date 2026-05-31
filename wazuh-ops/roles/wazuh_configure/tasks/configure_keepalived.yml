@@ -1,0 +1,35 @@
+---
+# Push keepalived.conf and check_haproxy.sh, then reload
+# Tags: configure, configure_keepalived
+
+- name: Backup existing keepalived.conf
+  ansible.builtin.copy:
+    src: /etc/keepalived/keepalived.conf
+    dest: "/etc/keepalived/keepalived.conf.bkp_{{ ansible_date_time.iso8601_basic_short }}"
+    remote_src: true
+    mode: "0600"
+  when: config_backup | bool
+  failed_when: false
+  tags: [configure, configure_keepalived]
+
+- name: Deploy keepalived.conf from template
+  ansible.builtin.template:
+    src: keepalived.conf.j2
+    dest: /etc/keepalived/keepalived.conf
+    owner: root
+    group: root
+    mode: "0600"
+  notify: reload keepalived
+  tags: [configure, configure_keepalived]
+
+- name: Deploy check_haproxy.sh
+  ansible.builtin.copy:
+    content: |
+      #!/bin/bash
+      systemctl is-active --quiet haproxy
+      exit $?
+    dest: "{{ keepalived_check_script_dest }}"
+    owner: root
+    group: root
+    mode: "0755"
+  tags: [configure, configure_keepalived]

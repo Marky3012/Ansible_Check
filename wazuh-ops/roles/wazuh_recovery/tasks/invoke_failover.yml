@@ -1,0 +1,47 @@
+---
+# STAGE 2 — INVOKE FAILOVER
+# Copies failover_wrapper.sh to the current MASTER node and executes it.
+# Hard abort if exit code != 0.
+# Tags: recovery, invoke, failover
+
+- name: "[INVOKE] Ensure scripts directory exists on target"
+  ansible.builtin.file:
+    path: "{{ recovery_scripts_dest_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  when: preflight_vip_present | bool
+  tags: [recovery, invoke, failover]
+
+- name: "[INVOKE] Copy failover_wrapper.sh to MASTER node"
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../scripts/wrappers/{{ failover_wrapper }}"
+    dest: "{{ recovery_scripts_dest_dir }}/{{ failover_wrapper }}"
+    owner: root
+    group: root
+    mode: "0750"
+  when: preflight_vip_present | bool
+  tags: [recovery, invoke, failover]
+
+- name: "[INVOKE] Execute failover wrapper on MASTER node"
+  ansible.builtin.command:
+    cmd: "{{ recovery_scripts_dest_dir }}/{{ failover_wrapper }}"
+    argv: []
+  register: failover_result
+  when: preflight_vip_present | bool
+  async: "{{ recovery_script_timeout }}"
+  poll: 5
+  tags: [recovery, invoke, failover]
+
+- name: "[INVOKE] GATE — Abort if failover script exited non-zero"
+  ansible.builtin.fail:
+    msg: |
+      INVOKE GATE FAILED: failover_wrapper.sh exited {{ failover_result.rc }}.
+      stdout: {{ failover_result.stdout | default('') }}
+      stderr: {{ failover_result.stderr | default('') }}
+  when:
+    - preflight_vip_present | bool
+    - failover_result.rc is defined
+    - failover_result.rc != 0
+  tags: [recovery, invoke, failover]

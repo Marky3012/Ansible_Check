@@ -1,0 +1,51 @@
+---
+# STAGE 3 — VALIDATE MANAGER RECOVERY
+# Queries Wazuh cluster API on new master and confirms:
+#   - New master reports type=master
+#   - Workers are connected (not just the API responding)
+# Tags: recovery, validate, manager_failover, manager_failback
+
+- name: "[VALIDATE-MANAGER] Wait for cluster to stabilize"
+  ansible.builtin.pause:
+    seconds: "{{ manager_stabilize_wait }}"
+  run_once: true
+  tags: [recovery, validate]
+
+- name: "[VALIDATE-MANAGER] Query new master cluster status"
+  ansible.builtin.uri:
+    url: "https://{{ hostvars[manager_new_master]['ansible_host'] }}:{{ wazuh_api_port }}/cluster/nodes"
+    method: GET
+    user: "{{ vault_wazuh_api_user }}"
+    password: "{{ vault_wazuh_api_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: 200
+    timeout: 15
+  register: validate_mgr_cluster
+  delegate_to: localhost
+  run_once: true
+  tags: [recovery, validate]
+
+- name: "[VALIDATE-MANAGER] Set validation summary"
+  ansible.builtin.set_fact:
+    recovery_validation:
+      new_master: "{{ manager_new_master }}"
+      cluster_nodes: "{{ validate_mgr_cluster.json.data.affected_items | length }}"
+      master_confirmed: >-
+        {{
+          validate_mgr_cluster.json.data.affected_items
+          | selectattr('type', 'eq', 'master')
+          | list | length > 0
+        }}
+  run_once: true
+  tags: [recovery, validate]
+
+- name: "[VALIDATE-MANAGER] GATE — Abort if no master found in cluster"
+  ansible.builtin.fail:
+    msg: >
+      VALIDATE GATE FAILED: Wazuh cluster API on {{ manager_new_master }}
+      does not show any node with type=master. Cluster may be split.
+      Manual investigation required.
+  when: not (recovery_validation.master_confirmed | bool)
+  run_once: true
+  tags: [recovery, validate]

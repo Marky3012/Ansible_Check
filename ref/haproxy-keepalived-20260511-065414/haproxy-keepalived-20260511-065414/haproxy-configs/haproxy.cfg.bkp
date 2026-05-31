@@ -1,0 +1,49 @@
+global
+    log /dev/log local0
+    log /dev/log local1 notice
+    daemon
+    maxconn 4096
+
+defaults
+    log global
+    mode tcp
+    option tcplog
+    timeout connect 10s
+    timeout client  1h
+    timeout server  1h
+    timeout tunnel  1h
+
+#################################################
+# WAZUH AGENT EVENTS (PORT 1514)
+#################################################
+
+frontend wazuh_agents_1514
+    bind 0.0.0.0:1514
+    default_backend wazuh_cluster_1514
+
+backend wazuh_cluster_1514
+    mode tcp
+    balance roundrobin
+    option tcp-check
+
+    server dc_manager1 172.21.1.85:1514 check inter 2s fall 2 rise 2
+    server dc_manager2 172.21.1.86:1514 check inter 2s fall 2 rise 2
+    server dr_manager1 172.21.5.85:1514 check inter 2s fall 2 rise 2
+    server dr_manager2 172.21.5.86:1514 check inter 2s fall 2 rise 2
+#################################################
+# WAZUH AGENT REGISTRATION (PORT 1515)
+#################################################
+
+frontend wazuh_agents_1515
+    bind 0.0.0.0:1515
+    default_backend wazuh_cluster_1515
+
+backend wazuh_cluster_1515
+    mode tcp
+    balance roundrobin
+    option tcp-check
+
+    server dc_manager1 172.21.1.85:1515 check inter 2s fall 2 rise 2
+    server dc_manager2 172.21.1.86:1515 check inter 2s fall 2 rise 2
+    server dr_manager1 172.21.5.85:1514 check inter 2s fall 2 rise 2
+    server dr_manager2 172.21.5.86:1514 check inter 2s fall 2 rise 2

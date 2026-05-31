@@ -1,0 +1,53 @@
+---
+# Push haproxy.cfg from template, validate, then reload
+# Tags: configure, configure_haproxy
+
+- name: Template haproxy.cfg to a staging path for validation
+  ansible.builtin.template:
+    src: haproxy.cfg.j2
+    dest: /tmp/haproxy.cfg.staged
+    mode: "0640"
+  tags: [configure, configure_haproxy]
+
+- name: Validate staged haproxy.cfg
+  ansible.builtin.command:
+    cmd: "haproxy -c -f /tmp/haproxy.cfg.staged"
+  changed_when: false
+  register: haproxy_validate
+  tags: [configure, configure_haproxy]
+
+- name: Fail if haproxy config is invalid
+  ansible.builtin.fail:
+    msg: "haproxy config validation failed:\n{{ haproxy_validate.stderr }}"
+  when: haproxy_validate.rc != 0
+  tags: [configure, configure_haproxy]
+
+- name: Backup existing haproxy.cfg
+  ansible.builtin.copy:
+    src: /etc/haproxy/haproxy.cfg
+    dest: "/etc/haproxy/haproxy.cfg.bkp_{{ ansible_date_time.iso8601_basic_short }}"
+    remote_src: true
+    mode: "0640"
+  when: config_backup | bool
+  failed_when: false
+  tags: [configure, configure_haproxy]
+
+- name: Deploy validated haproxy.cfg
+  ansible.builtin.template:
+    src: haproxy.cfg.j2
+    dest: /etc/haproxy/haproxy.cfg
+    owner: root
+    group: root
+    mode: "0640"
+    validate: "haproxy -c -f %s"
+  notify: reload haproxy
+  tags: [configure, configure_haproxy]
+
+- name: Ensure HAProxy stats socket directory exists
+  ansible.builtin.file:
+    path: "{{ haproxy_stats_socket_path | dirname }}"
+    state: directory
+    owner: root
+    group: haproxy
+    mode: "0750"
+  tags: [configure, configure_haproxy]

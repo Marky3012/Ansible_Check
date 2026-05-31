@@ -1,0 +1,98 @@
+---
+# wazuh_recovery — strict 4-stage sequence with hard abort gates
+# PREFLIGHT → INVOKE → VALIDATE → REPORT
+# Never proceeds past a failed gate.
+
+- name: Gather minimal facts
+  ansible.builtin.setup:
+    gather_subset: [min]
+  tags: [recovery]
+
+# ── STAGE 1: PREFLIGHT ────────────────────────────────────────────────────────
+- name: Run preflight checks
+  ansible.builtin.include_tasks: preflight_checks.yml
+  tags: [recovery, preflight]
+
+# ── STAGE 2: INVOKE ───────────────────────────────────────────────────────────
+- name: Run HAProxy failover
+  ansible.builtin.include_tasks: invoke_failover.yml
+  when: recovery_op == 'failover'
+  tags: [recovery, invoke, failover]
+
+- name: Run HAProxy failback
+  ansible.builtin.include_tasks: invoke_failback.yml
+  when: recovery_op == 'failback'
+  tags: [recovery, invoke, failback]
+
+- name: Run Indexer failover
+  ansible.builtin.include_tasks: invoke_indexer_failover.yml
+  when: recovery_op == 'indexer_failover'
+  tags: [recovery, invoke, indexer_failover]
+
+- name: Run Indexer failback
+  ansible.builtin.include_tasks: invoke_indexer_failback.yml
+  when: recovery_op == 'indexer_failback'
+  tags: [recovery, invoke, indexer_failback]
+
+- name: Run Manager failover
+  ansible.builtin.include_tasks: invoke_manager_failover.yml
+  when: recovery_op == 'manager_failover'
+  tags: [recovery, invoke, manager_failover]
+
+- name: Run Manager failback
+  ansible.builtin.include_tasks: invoke_manager_failback.yml
+  when: recovery_op == 'manager_failback'
+  tags: [recovery, invoke, manager_failback]
+
+- name: Run Postgres failover
+  ansible.builtin.include_tasks: invoke_postgres_failover.yml
+  when: recovery_op == 'postgres_failover'
+  tags: [recovery, invoke, postgres_failover]
+
+- name: Run Postgres failback
+  ansible.builtin.include_tasks: invoke_postgres_failback.yml
+  when: recovery_op == 'postgres_failback'
+  tags: [recovery, invoke, postgres_failback]
+
+# ── STAGE 3: VALIDATE (dispatched per component) ──────────────────────────────
+- name: Validate HAProxy recovery outcome
+  ansible.builtin.include_tasks: validate_recovery.yml
+  when: recovery_op in ['failover', 'failback']
+  tags: [recovery, validate]
+
+- name: Validate Indexer recovery outcome
+  ansible.builtin.include_tasks: validate_indexer.yml
+  when: recovery_op in ['indexer_failover', 'indexer_failback']
+  tags: [recovery, validate]
+
+- name: Validate Manager recovery outcome
+  ansible.builtin.include_tasks: validate_manager.yml
+  when: recovery_op in ['manager_failover', 'manager_failback']
+  tags: [recovery, validate]
+
+- name: Validate Postgres recovery outcome
+  ansible.builtin.include_tasks: validate_postgres.yml
+  when: recovery_op in ['postgres_failover', 'postgres_failback']
+  tags: [recovery, validate]
+
+# ── STAGE 4: REPORT + NOTIFY ──────────────────────────────────────────────────
+- name: Ensure reports directory exists
+  ansible.builtin.file:
+    path: "{{ report_dir }}"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  run_once: true
+  tags: [recovery]
+
+- name: Write recovery report
+  ansible.builtin.template:
+    src: recovery_report.j2
+    dest: "{{ report_dir }}/recovery_{{ recovery_op }}_{{ inventory_hostname }}_{{ ansible_date_time.iso8601_basic_short }}.txt"
+    mode: "0644"
+  delegate_to: localhost
+  tags: [recovery]
+
+- name: Send notification
+  ansible.builtin.include_tasks: notify.yml
+  tags: [recovery, notify]

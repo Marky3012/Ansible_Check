@@ -1,0 +1,123 @@
+---
+# STAGE 2 — INVOKE POSTGRES FAILOVER
+# Strict fencing order (split-brain prevention):
+#   1. FENCE: stop postgresql on old primary
+#   2. VERIFY FENCE: pg_isready fails + no postmaster.pid
+#   3. Promote standby via repmgr (wrapper)
+# Tags: recovery, invoke, postgres_failover
+
+- name: "[POSTGRES-FAILOVER] GATE — Assert required vars are set"
+  ansible.builtin.assert:
+    that:
+      - postgres_primary_host != ''
+      - postgres_standby_host != ''
+    fail_msg: >
+      postgres_failover requires:
+        -e "postgres_primary_host=<inventory-hostname>"
+        -e "postgres_standby_host=<inventory-hostname>"
+  run_once: true
+  delegate_to: localhost
+  tags: [recovery, invoke, postgres_failover]
+
+# ── FENCE old primary ─────────────────────────────────────────────────────────
+- name: "[POSTGRES-FAILOVER] FENCE — Stop postgresql service on old primary"
+  ansible.builtin.systemd:
+    name: "{{ postgres_service }}"
+    state: stopped
+  delegate_to: "{{ postgres_primary_host }}"
+  run_once: true
+  tags: [recovery, invoke, postgres_failover]
+
+# ── VERIFY FENCE ──────────────────────────────────────────────────────────────
+- name: "[POSTGRES-FAILOVER] VERIFY FENCE — pg_isready must fail"
+  ansible.builtin.command:
+    cmd: "pg_isready -h 127.0.0.1 -p {{ postgres_port }} -t {{ postgres_pg_isready_timeout }}"
+  register: pg_isready_check
+  delegate_to: "{{ postgres_primary_host }}"
+  run_once: true
+  changed_when: false
+  failed_when: false
+  tags: [recovery, invoke, postgres_failover]
+
+- name: "[POSTGRES-FAILOVER] GATE — Abort if old primary is still accepting connections"
+  ansible.builtin.fail:
+    msg: >
+      FENCE GATE FAILED: pg_isready still succeeds on {{ postgres_primary_host }}
+      (port {{ postgres_port }}). PostgreSQL did not stop. Manual intervention required.
+  when: pg_isready_check.rc == 0
+  run_once: true
+  tags: [recovery, invoke, postgres_failover]
+
+- name: "[POSTGRES-FAILOVER] VERIFY FENCE — No postmaster.pid on old primary"
+  ansible.builtin.stat:
+    path: "{{ postgres_data_dir }}/postmaster.pid"
+  register: pg_pidfile_check
+  delegate_to: "{{ postgres_primary_host }}"
+  run_once: true
+  tags: [recovery, invoke, postgres_failover]
+
+- name: "[POSTGRES-FAILOVER] GATE — Abort if postmaster.pid still exists"
+  ansible.builtin.fail:
+    msg: >
+      FENCE GATE FAILED: postmaster.pid still present in {{ postgres_data_dir }}
+      on {{ postgres_primary_host }}. PostgreSQL may still be running. Aborting.
+  when: pg_pidfile_check.stat.exists
+  run_once: true
+  tags: [recovery, invoke, postgres_failover]
+
+# ── Promote standby ───────────────────────────────────────────────────────────
+- name: "[POSTGRES-FAILOVER] Ensure scripts dir on standby"
+  ansible.builtin.file:
+    path: "{{ recovery_scripts_dest_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  delegate_to: "{{ postgres_standby_host }}"
+  run_once: true
+  tags: [recovery, invoke, postgres_failover]
+
+- name: "[POSTGRES-FAILOVER] Deploy postgres_promote_wrapper.sh to standby"
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../scripts/wrappers/{{ postgres_promote_wrapper }}"
+    dest: "{{ recovery_scripts_dest_dir }}/{{ postgres_promote_wrapper }}"
+    owner: root
+    group: root
+    mode: "0750"
+  delegate_to: "{{ postgres_standby_host }}"
+  run_once: true
+  tags: [recovery, invoke, postgres_failover]
+
+- name: "[POSTGRES-FAILOVER] Promote standby to primary via repmgr"
+  ansible.builtin.command:
+    cmd: "{{ recovery_scripts_dest_dir }}/{{ postgres_promote_wrapper }}"
+  environment:
+    REPMGR_CONF: "{{ postgres_repmgr_conf }}"
+    REPMGR_USER: "{{ postgres_repmgr_user }}"
+    PG_ISREADY_TIMEOUT: "{{ postgres_pg_isready_timeout }}"
+  register: pg_promote_result
+  delegate_to: "{{ postgres_standby_host }}"
+  run_once: true
+  async: 120
+  poll: 5
+  tags: [recovery, invoke, postgres_failover]
+
+- name: "[POSTGRES-FAILOVER] GATE — Abort if promote wrapper failed"
+  ansible.builtin.fail:
+    msg: |
+      INVOKE GATE FAILED: postgres_promote_wrapper.sh exited {{ pg_promote_result.rc }}.
+      stdout: {{ pg_promote_result.stdout | default('') }}
+      stderr: {{ pg_promote_result.stderr | default('') }}
+  when:
+    - pg_promote_result.rc is defined
+    - pg_promote_result.rc != 0
+  run_once: true
+  tags: [recovery, invoke, postgres_failover]
+
+- name: "[POSTGRES-FAILOVER] Record new primary for validate stage"
+  ansible.builtin.set_fact:
+    postgres_new_primary: "{{ postgres_standby_host }}"
+    postgres_fenced_node: "{{ postgres_primary_host }}"
+  run_once: true
+  delegate_to: localhost
+  tags: [recovery, invoke, postgres_failover]

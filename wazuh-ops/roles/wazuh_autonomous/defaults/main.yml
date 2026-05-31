@@ -1,0 +1,25 @@
+---
+# ── wazuh_autonomous defaults ─────────────────────────────────────────────────
+# All decision thresholds are variables — nothing is hardcoded in tasks.
+
+# Master switch — set false to make this role report-only (never triggers actions)
+auto_recovery_enabled: true
+
+# Manager: if any manager is DOWN and standby is healthy, trigger failover
+manager_down_triggers_recovery: true
+
+# Agents: trigger re-enrollment if disconnected agents exceed this count
+disconnected_agent_threshold: 5
+
+# Indexer: if cluster health is RED, trigger escalation (not auto-recovery)
+indexer_red_triggers_escalation: true
+
+# Config drift: if drift is detected, trigger configure role
+config_drift_triggers_configure: true
+
+# Safety: never attempt recovery more than once per autonomous run
+# (prevents infinite loops — escalate immediately after one failure)
+max_recovery_attempts: 1
+
+# Escalation report path
+escalation_report_path: "{{ report_dir }}/escalation_{{ ansible_date_time.iso8601_basic_short }}.json"

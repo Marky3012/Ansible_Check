@@ -1,0 +1,30 @@
+---
+# vars/vault.yml.example
+# Plaintext example — copy to vault.yml and encrypt with:
+#   ansible-vault encrypt vars/vault.yml
+#
+# Every key referenced by any task must appear here.
+
+vault_wazuh_api_user: "wazuh-wui"
+vault_wazuh_api_password: "CHANGE_ME"
+
+vault_wazuh_indexer_user: "admin"
+vault_wazuh_indexer_password: "CHANGE_ME"
+
+vault_haproxy_stats_user: "admin"
+vault_haproxy_stats_password: "CHANGE_ME"
+
+vault_keepalived_auth_pass: "CHANGE_ME"
+
+# Slack/PagerDuty/Teams webhook URL
+vault_notification_webhook: "https://hooks.slack.com/services/CHANGE_ME"
+
+# Wazuh agent enrollment password (used by agent_ops.yml)
+vault_wazuh_agent_enrollment_password: "CHANGE_ME"
+
+# Wazuh cluster key (required when cluster is enabled)
+vault_wazuh_cluster_key: "CHANGE_ME"
+
+# PostgreSQL / repmgr
+vault_postgres_repmgr_password: "CHANGE_ME"
+vault_postgres_replication_password: "CHANGE_ME"

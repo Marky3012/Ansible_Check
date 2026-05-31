@@ -1,0 +1,11 @@
+---
+# No community collections required by default.
+# Add entries here if extending the framework with community modules.
+#
+# Example:
+# collections:
+#   - name: community.general
+#     version: ">=7.0.0"
+#
+# Install with: ansible-galaxy collection install -r requirements.yml
+collections: []

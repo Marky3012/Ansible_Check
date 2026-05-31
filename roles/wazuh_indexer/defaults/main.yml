@@ -1,0 +1,90 @@
+---
+# =============================================================================
+# Wazuh Indexer - Default Variables
+# =============================================================================
+# These defaults can be overridden in host_vars, group_vars, or playbook vars.
+# Wazuh version: 4.11.2 | Target OS: Ubuntu 24.04 / RHEL
+# =============================================================================
+
+# -------------------------
+# Wazuh Package Version
+# -------------------------
+wazuh_indexer_version: "4.11.2"
+
+# -------------------------
+# Cluster Configuration
+# -------------------------
+# Name of the Wazuh indexer (OpenSearch) cluster
+wazuh_indexer_cluster_name: "wazuh-cluster"
+
+# Unique name for this indexer node
+wazuh_indexer_node_name: "wazuh-indexer-1"
+
+# Network interface to bind to (0.0.0.0 = all interfaces)
+wazuh_indexer_network_host: "0.0.0.0"
+
+# HTTP API port (REST interface)
+wazuh_indexer_http_port: 9200
+
+# Transport port (inter-node communication)
+wazuh_indexer_transport_port: 9300
+
+# -------------------------
+# JVM Heap Configuration
+# -------------------------
+# JVM heap size - recommended: 50% of available RAM, max 32g
+wazuh_indexer_jvm_heap_size: "1g"
+
+# -------------------------
+# Discovery & Clustering
+# -------------------------
+# List of seed hosts for node discovery
+wazuh_indexer_discovery_seed_hosts:
+  - "127.0.0.1"
+
+# List of nodes eligible to be elected as initial master
+wazuh_indexer_initial_master_nodes:
+  - "wazuh-indexer-1"
+
+# -------------------------
+# Data & Log Paths
+# -------------------------
+wazuh_indexer_path_data: "/var/lib/wazuh-indexer"
+wazuh_indexer_path_logs: "/var/log/wazuh-indexer"
+
+# -------------------------
+# TLS/SSL Configuration
+# -------------------------
+# Set to true to enable TLS/SSL security plugin
+wazuh_indexer_security_enabled: false
+
+# Transport layer TLS (inter-node)
+wazuh_indexer_ssl_transport_pemcert: "/etc/wazuh-indexer/certs/indexer.pem"
+wazuh_indexer_ssl_transport_pemkey: "/etc/wazuh-indexer/certs/indexer-key.pem"
+wazuh_indexer_ssl_transport_pemtrustedcas: "/etc/wazuh-indexer/certs/root-ca.pem"
+wazuh_indexer_ssl_transport_enforce_hostname_verification: false
+
+# HTTP layer TLS (REST API)
+wazuh_indexer_ssl_http_enabled: true
+wazuh_indexer_ssl_http_pemcert: "/etc/wazuh-indexer/certs/indexer.pem"
+wazuh_indexer_ssl_http_pemkey: "/etc/wazuh-indexer/certs/indexer-key.pem"
+wazuh_indexer_ssl_http_pemtrustedcas: "/etc/wazuh-indexer/certs/root-ca.pem"
+
+# -------------------------
+# Security Admin Configuration
+# -------------------------
+# Path to securityadmin.sh script
+wazuh_indexer_securityadmin_path: "/usr/share/wazuh-indexer/plugins/opensearch-security/tools/securityadmin.sh"
+
+# Admin certificate for running securityadmin.sh
+wazuh_indexer_admin_pemcert: "/etc/wazuh-indexer/certs/admin.pem"
+wazuh_indexer_admin_pemkey: "/etc/wazuh-indexer/certs/admin-key.pem"
+
+# -------------------------
+# Service Configuration
+# -------------------------
+# Whether to enable the service on boot
+wazuh_indexer_service_enabled: true
+
+# Desired service state
+wazuh_indexer_service_state: "started"

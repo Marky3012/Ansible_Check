@@ -1,0 +1,31 @@
+# Managed by Ansible — wazuh-ops. Manual edits will be overwritten.
+# Source role : wazuh_configure
+# Template    : keepalived.conf.j2
+
+vrrp_script chk_haproxy {
+    script   "{{ keepalived_check_script_dest }}"
+    interval {{ keepalived_check_script_interval }}
+    fall     {{ keepalived_check_script_fall }}
+    rise     {{ keepalived_check_script_rise }}
+}
+
+vrrp_instance {{ keepalived_vrrp_instance_name }} {
+    state             {{ keepalived_node_state }}
+    interface         {{ keepalived_interface }}
+    virtual_router_id {{ keepalived_virtual_router_id }}
+    priority          {{ keepalived_node_priority }}
+    advert_int        {{ keepalived_advert_int }}
+
+    authentication {
+        auth_type {{ keepalived_auth_type }}
+        auth_pass {{ keepalived_auth_pass }}
+    }
+
+    virtual_ipaddress {
+        {{ keepalived_virtual_ip }}
+    }
+
+    track_script {
+        chk_haproxy
+    }
+}

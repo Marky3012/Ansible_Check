@@ -1,0 +1,75 @@
+---
+# Detect config drift: compare live config on host against what Ansible would render
+# Read-only — never writes to the host
+# Tags: troubleshoot, detect_drift
+
+- name: Render haproxy.cfg locally for diff (haproxy_nodes only)
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/../roles/wazuh_configure/templates/haproxy.cfg.j2"
+    dest: "{{ troubleshoot_fetch_dir }}/{{ inventory_hostname }}/haproxy.cfg.rendered"
+    mode: "0644"
+  delegate_to: localhost
+  when: inventory_hostname in groups['haproxy_nodes']
+  tags: [troubleshoot, detect_drift]
+
+- name: Render keepalived.conf locally for diff (haproxy_nodes only)
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/../roles/wazuh_configure/templates/keepalived.conf.j2"
+    dest: "{{ troubleshoot_fetch_dir }}/{{ inventory_hostname }}/keepalived.conf.rendered"
+    mode: "0644"
+  delegate_to: localhost
+  when: inventory_hostname in groups['haproxy_nodes']
+  tags: [troubleshoot, detect_drift]
+
+- name: Fetch live haproxy.cfg from host
+  ansible.builtin.fetch:
+    src: /etc/haproxy/haproxy.cfg
+    dest: "{{ troubleshoot_fetch_dir }}/{{ inventory_hostname }}/haproxy.cfg.live"
+    flat: true
+  when: inventory_hostname in groups['haproxy_nodes']
+  tags: [troubleshoot, detect_drift]
+
+- name: Fetch live keepalived.conf from host
+  ansible.builtin.fetch:
+    src: /etc/keepalived/keepalived.conf
+    dest: "{{ troubleshoot_fetch_dir }}/{{ inventory_hostname }}/keepalived.conf.live"
+    flat: true
+  when: inventory_hostname in groups['haproxy_nodes']
+  tags: [troubleshoot, detect_drift]
+
+- name: Diff haproxy.cfg rendered vs live
+  ansible.builtin.command:
+    cmd: >
+      diff
+      {{ troubleshoot_fetch_dir }}/{{ inventory_hostname }}/haproxy.cfg.rendered
+      {{ troubleshoot_fetch_dir }}/{{ inventory_hostname }}/haproxy.cfg.live
+  register: haproxy_drift
+  changed_when: false
+  failed_when: false
+  delegate_to: localhost
+  when: inventory_hostname in groups['haproxy_nodes']
+  tags: [troubleshoot, detect_drift]
+
+- name: Diff keepalived.conf rendered vs live
+  ansible.builtin.command:
+    cmd: >
+      diff
+      {{ troubleshoot_fetch_dir }}/{{ inventory_hostname }}/keepalived.conf.rendered
+      {{ troubleshoot_fetch_dir }}/{{ inventory_hostname }}/keepalived.conf.live
+  register: keepalived_drift
+  changed_when: false
+  failed_when: false
+  delegate_to: localhost
+  when: inventory_hostname in groups['haproxy_nodes']
+  tags: [troubleshoot, detect_drift]
+
+- name: Set config drift facts
+  ansible.builtin.set_fact:
+    config_drift:
+      haproxy:
+        drifted: "{{ haproxy_drift.rc | default(0) != 0 }}"
+        diff: "{{ haproxy_drift.stdout | default('') }}"
+      keepalived:
+        drifted: "{{ keepalived_drift.rc | default(0) != 0 }}"
+        diff: "{{ keepalived_drift.stdout | default('') }}"
+  tags: [troubleshoot, detect_drift]

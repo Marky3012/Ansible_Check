@@ -1,0 +1,40 @@
+---
+# ansible-playbook master.yml -e "mode=agent_ops"
+# Agent enrollment, re-enrollment, and group assignment via Manager API.
+# Can also be triggered by wazuh_autonomous when disconnected agents exceed threshold.
+
+- name: Agent operations
+  hosts: wazuh_managers
+  gather_facts: false
+  serial: 1
+  tasks:
+
+    - name: Query all disconnected agents
+      ansible.builtin.uri:
+        url: "https://{{ ansible_host }}:{{ wazuh_api_port }}/agents?status=disconnected&limit=500"
+        method: GET
+        user: "{{ vault_wazuh_api_user }}"
+        password: "{{ vault_wazuh_api_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        return_content: true
+      register: disconnected_agents
+      failed_when: false
+      delegate_to: localhost
+      run_once: true
+      tags: [agent_ops, query]
+
+    - name: Report disconnected agent count
+      ansible.builtin.debug:
+        msg: "Disconnected agents: {{ disconnected_agents.json.data.total_affected_items | default(0) }}"
+      run_once: true
+      tags: [agent_ops, query]
+
+    - name: Re-enroll disconnected agents (restart wazuh-agent on agent nodes)
+      ansible.builtin.service:
+        name: wazuh-agent
+        state: restarted
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['wazuh_agents'] | default([]) }}"
+      when: groups['wazuh_agents'] | default([]) | length > 0
+      tags: [agent_ops, reenroll]

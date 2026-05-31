@@ -1,0 +1,37 @@
+---
+# ── Global vars shared across all host groups ─────────────────────────────────
+
+# Wazuh version
+wazuh_version: "4.11.2"
+
+# Ports
+wazuh_agent_port: 1514          # Agent ↔ Manager (TCP)
+wazuh_enrollment_port: 1515     # Agent enrollment (TCP)
+wazuh_cluster_port: 1516        # Manager cluster daemon (TCP)
+wazuh_api_port: 55000           # Wazuh REST API (HTTPS)
+wazuh_indexer_port: 9200        # OpenSearch HTTP
+wazuh_indexer_transport_port: 9300
+
+# OSSEC base paths (same on all nodes)
+wazuh_dir: /var/ossec
+wazuh_config_dir: "{{ wazuh_dir }}/etc"
+wazuh_log_dir: "{{ wazuh_dir }}/logs"
+wazuh_rules_dir: "{{ wazuh_dir }}/ruleset/rules"
+wazuh_decoders_dir: "{{ wazuh_dir }}/ruleset/decoders"
+
+# Reports
+report_dir: "{{ playbook_dir }}/../reports"
+
+# Valid modes for master.yml validation
+valid_modes:
+  - healthcheck
+  - configure
+  - troubleshoot
+  - recovery
+  - autonomous
+
+# Notification target: slack | log
+notification_target: log
+
+# Auto-timezone
+timezone: UTC

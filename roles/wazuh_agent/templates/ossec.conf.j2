@@ -1,0 +1,175 @@
+<!--
+  =============================================================================
+  Wazuh Agent - ossec.conf Configuration
+  =============================================================================
+  Managed by Ansible - DO NOT EDIT MANUALLY
+  Template: roles/wazuh_agent/templates/ossec.conf.j2
+  =============================================================================
+-->
+<ossec_config>
+
+  <!-- =====================================================================
+       Client: Manager Connection
+       ===================================================================== -->
+  <client>
+    <server>
+      <address>{{ wazuh_agent_manager_ip }}</address>
+      <port>{{ wazuh_agent_manager_port }}</port>
+      <protocol>{{ wazuh_agent_manager_protocol }}</protocol>
+    </server>
+    <config-profile>{{ ansible_os_family | lower }}</config-profile>
+    <notify_time>10</notify_time>
+    <time-reconnect>60</time-reconnect>
+    <auto_restart>yes</auto_restart>
+  </client>
+
+  <!-- =====================================================================
+       Enrollment: Automatic Agent Registration
+       ===================================================================== -->
+  <enrollment>
+    <enabled>{{ wazuh_agent_enrollment_enabled }}</enabled>
+    <manager_address>{{ wazuh_agent_enrollment_manager_address }}</manager_address>
+    <port>{{ wazuh_agent_enrollment_port }}</port>
+    <agent_name>{{ wazuh_agent_enrollment_agent_name }}</agent_name>
+{% if wazuh_agent_groups | length > 0 %}
+    <groups>{{ wazuh_agent_groups | join(',') }}</groups>
+{% endif %}
+{% if wazuh_agent_registration_password | length > 0 %}
+    <authorization_pass_path>{{ wazuh_agent_authd_pass_path }}</authorization_pass_path>
+{% endif %}
+  </enrollment>
+
+  <!-- =====================================================================
+       Client Buffer: Event Buffering Settings
+       ===================================================================== -->
+  <client_buffer>
+    <disabled>{{ wazuh_agent_client_buffer_disabled }}</disabled>
+    <queue_size>{{ wazuh_agent_client_buffer_queue_size }}</queue_size>
+    <events_per_second>{{ wazuh_agent_client_buffer_events_per_second }}</events_per_second>
+  </client_buffer>
+
+  <!-- =====================================================================
+       Syscheck: File Integrity Monitoring
+       ===================================================================== -->
+  <syscheck>
+    <disabled>no</disabled>
+    <frequency>{{ wazuh_agent_syscheck_frequency }}</frequency>
+    <scan_on_start>{{ wazuh_agent_syscheck_scan_on_start }}</scan_on_start>
+    <alert_new_files>yes</alert_new_files>
+
+    <!-- Monitored directories -->
+{% for dir in wazuh_agent_syscheck_directories %}
+    <directories check_all="{{ dir.check_all | default('yes') }}" realtime="{{ dir.realtime | default('no') }}" report_changes="{{ dir.report_changes | default('no') }}">{{ dir.path }}</directories>
+{% endfor %}
+
+    <!-- Files and directories to ignore -->
+    <ignore>/etc/mtab</ignore>
+    <ignore>/etc/hosts.deny</ignore>
+    <ignore>/etc/mail/statistics</ignore>
+    <ignore>/etc/random-seed</ignore>
+    <ignore>/etc/random.seed</ignore>
+    <ignore>/etc/adjtime</ignore>
+    <ignore>/etc/httpd/logs</ignore>
+    <ignore>/etc/utmpx</ignore>
+    <ignore>/etc/wtmpx</ignore>
+    <ignore>/etc/cups/certs</ignore>
+    <ignore>/etc/dumpdates</ignore>
+    <ignore>/etc/svc/volatile</ignore>
+    <ignore type="sregex">.log$|.swp$</ignore>
+
+    <!-- No diff for sensitive files -->
+    <nodiff>/etc/ssl/private.key</nodiff>
+  </syscheck>
+
+  <!-- =====================================================================
+       Rootcheck: Rootkit and Anomaly Detection
+       ===================================================================== -->
+  <rootcheck>
+    <disabled>{{ 'no' if wazuh_agent_rootcheck_enabled == 'yes' else 'yes' }}</disabled>
+    <check_files>yes</check_files>
+    <check_trojans>yes</check_trojans>
+    <check_dev>yes</check_dev>
+    <check_sys>yes</check_sys>
+    <check_pids>yes</check_pids>
+    <check_ports>yes</check_ports>
+    <check_if>yes</check_if>
+    <rootkit_files>/var/ossec/etc/shared/rootkit_files.txt</rootkit_files>
+    <rootkit_trojans>/var/ossec/etc/shared/rootkit_trojans.txt</rootkit_trojans>
+  </rootcheck>
+
+  <!-- =====================================================================
+       Log Collection: Local Log Files
+       ===================================================================== -->
+
+{% if ansible_os_family == "Debian" %}
+  <!-- Debian/Ubuntu log files -->
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/log/syslog</location>
+  </localfile>
+
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/log/auth.log</location>
+  </localfile>
+
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/log/dpkg.log</location>
+  </localfile>
+
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/log/kern.log</location>
+  </localfile>
+{% endif %}
+
+{% if ansible_os_family == "RedHat" %}
+  <!-- RedHat/CentOS log files -->
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/log/messages</location>
+  </localfile>
+
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/log/secure</location>
+  </localfile>
+
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/log/maillog</location>
+  </localfile>
+
+  <localfile>
+    <log_format>audit</log_format>
+    <location>/var/log/audit/audit.log</location>
+  </localfile>
+
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/log/yum.log</location>
+  </localfile>
+{% endif %}
+
+  <!-- Common log files (all OS families) -->
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/log/cron</location>
+  </localfile>
+
+  <!-- =====================================================================
+       Active Response
+       ===================================================================== -->
+  <active-response>
+    <disabled>{{ wazuh_agent_active_response_disabled }}</disabled>
+  </active-response>
+
+  <!-- =====================================================================
+       Logging
+       ===================================================================== -->
+  <logging>
+    <log_format>{{ wazuh_agent_log_format }}</log_format>
+  </logging>
+
+</ossec_config>

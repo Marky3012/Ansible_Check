@@ -1,0 +1,17 @@
+---
+# =============================================================================
+# wazuh_common - Handlers
+# =============================================================================
+# Handlers for reloading the host firewall after rule changes.
+
+- name: Reload UFW
+  ansible.builtin.command: ufw reload
+  listen: Reload UFW
+  when: ansible_os_family == 'Debian'
+
+- name: Reload firewalld
+  ansible.builtin.systemd:
+    name: firewalld
+    state: reloaded
+  listen: Reload firewalld
+  when: ansible_os_family == 'RedHat'

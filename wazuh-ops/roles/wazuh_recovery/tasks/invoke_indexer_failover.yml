@@ -1,0 +1,126 @@
+---
+# STAGE 2 — INVOKE INDEXER FAILOVER
+# Step order (split-brain prevention):
+#   1. Exclude failing node from OpenSearch voting config (API fence)
+#   2. Drain shards away from failing node (API)
+#   3. Poll until no unassigned shards remain
+#   4. Stop wazuh-indexer service on failing node (if still reachable)
+# Any step failure is a hard abort.
+# Tags: recovery, invoke, indexer_failover
+
+# ── API fence: add voting config exclusion ────────────────────────────────────
+- name: "[INDEXER-FAILOVER] Add voting config exclusion for failing node"
+  ansible.builtin.uri:
+    url: "{{ wazuh_indexer_api_scheme }}://{{ hostvars[indexer_surviving_node]['ansible_host'] }}:{{ wazuh_indexer_port }}/_cluster/voting_config_exclusions?node_names={{ indexer_failing_node }}&timeout=30s"
+    method: POST
+    user: "{{ vault_wazuh_indexer_user }}"
+    password: "{{ vault_wazuh_indexer_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ wazuh_indexer_validate_certs }}"
+    ca_path: "{{ wazuh_indexer_ca_cert | default(omit) }}"
+    status_code: [200, 201]
+    timeout: 35
+  delegate_to: localhost
+  run_once: true
+  tags: [recovery, invoke, indexer_failover]
+
+# ── API fence: drain shards from failing node ─────────────────────────────────
+- name: "[INDEXER-FAILOVER] Exclude failing node from shard allocation"
+  ansible.builtin.uri:
+    url: "{{ wazuh_indexer_api_scheme }}://{{ hostvars[indexer_surviving_node]['ansible_host'] }}:{{ wazuh_indexer_port }}/_cluster/settings"
+    method: PUT
+    user: "{{ vault_wazuh_indexer_user }}"
+    password: "{{ vault_wazuh_indexer_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ wazuh_indexer_validate_certs }}"
+    ca_path: "{{ wazuh_indexer_ca_cert | default(omit) }}"
+    body_format: json
+    body:
+      transient:
+        cluster.routing.allocation.exclude._name: "{{ indexer_failing_node }}"
+    status_code: 200
+    timeout: 30
+  delegate_to: localhost
+  run_once: true
+  tags: [recovery, invoke, indexer_failover]
+
+# ── Poll until shards reallocated ─────────────────────────────────────────────
+- name: "[INDEXER-FAILOVER] Poll cluster health until no unassigned shards"
+  ansible.builtin.uri:
+    url: "{{ wazuh_indexer_api_scheme }}://{{ hostvars[indexer_surviving_node]['ansible_host'] }}:{{ wazuh_indexer_port }}/_cluster/health?timeout=10s"
+    method: GET
+    user: "{{ vault_wazuh_indexer_user }}"
+    password: "{{ vault_wazuh_indexer_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ wazuh_indexer_validate_certs }}"
+    ca_path: "{{ wazuh_indexer_ca_cert | default(omit) }}"
+    status_code: 200
+    timeout: 15
+  register: indexer_cluster_health
+  delegate_to: localhost
+  run_once: true
+  until: (indexer_cluster_health.json.unassigned_shards | int) == 0
+  retries: "{{ (indexer_shard_drain_timeout | int) // 10 }}"
+  delay: 10
+  tags: [recovery, invoke, indexer_failover]
+
+- name: "[INDEXER-FAILOVER] GATE — Abort if shards did not drain in time"
+  ansible.builtin.fail:
+    msg: >
+      INVOKE GATE FAILED: {{ indexer_cluster_health.json.unassigned_shards }} unassigned shards
+      remain after {{ indexer_shard_drain_timeout }}s. Manual shard inspection required.
+  when: (indexer_cluster_health.json.unassigned_shards | int) > 0
+  run_once: true
+  tags: [recovery, invoke, indexer_failover]
+
+# ── Service stop on failing node (best-effort — node may be unreachable) ──────
+- name: "[INDEXER-FAILOVER] Check if failing node is reachable"
+  ansible.builtin.wait_for_connection:
+    timeout: 10
+  delegate_to: "{{ indexer_failing_node }}"
+  register: indexer_failing_reachable
+  failed_when: false
+  run_once: true
+  tags: [recovery, invoke, indexer_failover]
+
+- name: "[INDEXER-FAILOVER] Deploy failover wrapper to failing node"
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../scripts/wrappers/{{ indexer_failover_wrapper }}"
+    dest: "{{ recovery_scripts_dest_dir }}/{{ indexer_failover_wrapper }}"
+    owner: root
+    group: root
+    mode: "0750"
+  delegate_to: "{{ indexer_failing_node }}"
+  when: indexer_failing_reachable is not failed
+  tags: [recovery, invoke, indexer_failover]
+
+- name: "[INDEXER-FAILOVER] Stop wazuh-indexer on failing node"
+  ansible.builtin.command:
+    cmd: "{{ recovery_scripts_dest_dir }}/{{ indexer_failover_wrapper }}"
+  environment:
+    INDEXER_SERVICE: "{{ wazuh_indexer_service }}"
+    STOP_TIMEOUT: "60"
+  register: indexer_stop_result
+  delegate_to: "{{ indexer_failing_node }}"
+  when: indexer_failing_reachable is not failed
+  async: 90
+  poll: 5
+  tags: [recovery, invoke, indexer_failover]
+
+- name: "[INDEXER-FAILOVER] GATE — Abort if service stop failed"
+  ansible.builtin.fail:
+    msg: |
+      INVOKE GATE FAILED: indexer_failover_wrapper.sh exited {{ indexer_stop_result.rc }}.
+      stdout: {{ indexer_stop_result.stdout | default('') }}
+      stderr: {{ indexer_stop_result.stderr | default('') }}
+  when:
+    - indexer_failing_reachable is not failed
+    - indexer_stop_result.rc is defined
+    - indexer_stop_result.rc != 0
+  tags: [recovery, invoke, indexer_failover]
+
+- name: "[INDEXER-FAILOVER] Log that failing node was unreachable (already isolated)"
+  ansible.builtin.debug:
+    msg: "Failing node {{ indexer_failing_node }} is unreachable — treated as already isolated by API fence."
+  when: indexer_failing_reachable is failed
+  tags: [recovery, invoke, indexer_failover]

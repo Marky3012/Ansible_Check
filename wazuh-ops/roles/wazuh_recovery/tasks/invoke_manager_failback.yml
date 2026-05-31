@@ -1,0 +1,152 @@
+---
+# STAGE 2 — INVOKE MANAGER FAILBACK
+# Restores the original cluster topology:
+#   1. FENCE currently-promoted master (stop it)
+#   2. VERIFY FENCE (port 1516 gone)
+#   3. Start original master (promote wrapper on it — it re-sets node_type=master)
+#   4. Demote the previously-promoted node back to worker (demote wrapper)
+# Tags: recovery, invoke, manager_failback
+
+- name: "[MANAGER-FAILBACK] GATE — Assert required vars are set"
+  ansible.builtin.assert:
+    that:
+      - manager_promote_candidate != ''
+      - manager_original_master != ''
+    fail_msg: >
+      manager_failback requires both -e "manager_promote_candidate=<current-master>"
+      and -e "manager_original_master=<node-to-restore-as-master>"
+  run_once: true
+  delegate_to: localhost
+  tags: [recovery, invoke, manager_failback]
+
+# ── FENCE currently-promoted master ───────────────────────────────────────────
+- name: "[MANAGER-FAILBACK] FENCE — Stop wazuh-manager on promoted master"
+  ansible.builtin.systemd:
+    name: "{{ wazuh_manager_service }}"
+    state: stopped
+  delegate_to: "{{ manager_promote_candidate }}"
+  run_once: true
+  tags: [recovery, invoke, manager_failback]
+
+- name: "[MANAGER-FAILBACK] VERIFY FENCE — Cluster port not listening"
+  ansible.builtin.wait_for:
+    host: "{{ hostvars[manager_promote_candidate]['ansible_host'] }}"
+    port: "{{ wazuh_cluster_port }}"
+    state: stopped
+    timeout: 30
+  delegate_to: localhost
+  run_once: true
+  tags: [recovery, invoke, manager_failback]
+
+- name: "[MANAGER-FAILBACK] VERIFY FENCE — No clusterd pidfile on promoted node"
+  ansible.builtin.find:
+    paths: /var/ossec/var/run
+    patterns: "wazuh-clusterd-*.pid"
+  register: failback_fence_pid
+  delegate_to: "{{ manager_promote_candidate }}"
+  run_once: true
+  tags: [recovery, invoke, manager_failback]
+
+- name: "[MANAGER-FAILBACK] GATE — Abort if promoted node not fully fenced"
+  ansible.builtin.fail:
+    msg: "FENCE GATE FAILED: clusterd pidfile still present on {{ manager_promote_candidate }}."
+  when: failback_fence_pid.files | length > 0
+  run_once: true
+  tags: [recovery, invoke, manager_failback]
+
+# ── Restore original master ───────────────────────────────────────────────────
+- name: "[MANAGER-FAILBACK] Ensure scripts dir on original master"
+  ansible.builtin.file:
+    path: "{{ recovery_scripts_dest_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  delegate_to: "{{ manager_original_master }}"
+  run_once: true
+  tags: [recovery, invoke, manager_failback]
+
+- name: "[MANAGER-FAILBACK] Deploy promote wrapper to original master"
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../scripts/wrappers/{{ manager_promote_wrapper }}"
+    dest: "{{ recovery_scripts_dest_dir }}/{{ manager_promote_wrapper }}"
+    owner: root
+    group: root
+    mode: "0750"
+  delegate_to: "{{ manager_original_master }}"
+  run_once: true
+  tags: [recovery, invoke, manager_failback]
+
+- name: "[MANAGER-FAILBACK] Start original master"
+  ansible.builtin.command:
+    cmd: "{{ recovery_scripts_dest_dir }}/{{ manager_promote_wrapper }}"
+  environment:
+    OSSEC_CONF: "{{ manager_ossec_conf }}"
+    MANAGER_SERVICE: "{{ wazuh_manager_service }}"
+    CLUSTER_KEY: "{{ vault_wazuh_cluster_key }}"
+    START_TIMEOUT: "{{ manager_stabilize_wait }}"
+  register: manager_restore_result
+  delegate_to: "{{ manager_original_master }}"
+  run_once: true
+  async: "{{ (manager_stabilize_wait | int) + 30 }}"
+  poll: 5
+  tags: [recovery, invoke, manager_failback]
+
+- name: "[MANAGER-FAILBACK] GATE — Abort if original master start failed"
+  ansible.builtin.fail:
+    msg: |
+      INVOKE GATE FAILED: manager_promote_wrapper.sh exited {{ manager_restore_result.rc }}.
+      stdout: {{ manager_restore_result.stdout | default('') }}
+      stderr: {{ manager_restore_result.stderr | default('') }}
+  when:
+    - manager_restore_result.rc is defined
+    - manager_restore_result.rc != 0
+  run_once: true
+  tags: [recovery, invoke, manager_failback]
+
+# ── Demote previously-promoted node back to worker ───────────────────────────
+- name: "[MANAGER-FAILBACK] Deploy demote wrapper to previously-promoted node"
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../scripts/wrappers/{{ manager_demote_wrapper }}"
+    dest: "{{ recovery_scripts_dest_dir }}/{{ manager_demote_wrapper }}"
+    owner: root
+    group: root
+    mode: "0750"
+  delegate_to: "{{ manager_promote_candidate }}"
+  run_once: true
+  tags: [recovery, invoke, manager_failback]
+
+- name: "[MANAGER-FAILBACK] Demote previously-promoted node to worker"
+  ansible.builtin.command:
+    cmd: "{{ recovery_scripts_dest_dir }}/{{ manager_demote_wrapper }}"
+  environment:
+    OSSEC_CONF: "{{ manager_ossec_conf }}"
+    MANAGER_SERVICE: "{{ wazuh_manager_service }}"
+    MANAGER_MASTER_IP: "{{ hostvars[manager_original_master]['ansible_host'] }}"
+    CLUSTER_KEY: "{{ vault_wazuh_cluster_key }}"
+    START_TIMEOUT: "{{ manager_stabilize_wait }}"
+  register: manager_demote_result
+  delegate_to: "{{ manager_promote_candidate }}"
+  run_once: true
+  async: "{{ (manager_stabilize_wait | int) + 30 }}"
+  poll: 5
+  tags: [recovery, invoke, manager_failback]
+
+- name: "[MANAGER-FAILBACK] GATE — Abort if demote wrapper failed"
+  ansible.builtin.fail:
+    msg: |
+      INVOKE GATE FAILED: manager_demote_wrapper.sh exited {{ manager_demote_result.rc }}.
+      stdout: {{ manager_demote_result.stdout | default('') }}
+      stderr: {{ manager_demote_result.stderr | default('') }}
+  when:
+    - manager_demote_result.rc is defined
+    - manager_demote_result.rc != 0
+  run_once: true
+  tags: [recovery, invoke, manager_failback]
+
+- name: "[MANAGER-FAILBACK] Record new master for validate stage"
+  ansible.builtin.set_fact:
+    manager_new_master: "{{ manager_original_master }}"
+  run_once: true
+  delegate_to: localhost
+  tags: [recovery, invoke, manager_failback]

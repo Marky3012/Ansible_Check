@@ -1,0 +1,109 @@
+---
+# =============================================================================
+# Wazuh Agent Group Variables
+# Target OS: Ubuntu 24.04 / RHEL
+#
+# These variables apply to all hosts in the [wazuh_agents] group.
+# They control agent enrollment, manager connectivity, and monitored resources.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Manager Connectivity
+# ---------------------------------------------------------------------------
+# IP address of the Wazuh manager that agents connect to
+# Dynamically resolves from the first host in the wazuh_manager group;
+# falls back to 'MANAGER_IP' if the inventory variable is unavailable
+wazuh_agent_manager_ip: '{{ hostvars[groups["wazuh_manager"][0]]["ansible_host"] | default("MANAGER_IP") }}'
+
+# Protocol for agent-manager communication ('tcp' or 'udp')
+wazuh_agent_protocol: 'tcp'
+
+# Port for agent-manager event communication
+wazuh_agent_manager_port: 1514
+
+# ---------------------------------------------------------------------------
+# Agent Registration / Enrollment
+# ---------------------------------------------------------------------------
+# Enable automatic agent enrollment with the manager
+wazuh_agent_enrollment_enabled: 'yes'
+
+# Password used for agent registration with the manager
+# CHANGE_ME: encrypt with ansible-vault in production
+wazuh_agent_registration_password: 'CHANGE_ME'  # USE ansible-vault: ansible-vault encrypt_string
+
+# Agent groups to assign upon registration
+# Agents inherit shared configurations from these groups on the manager
+wazuh_agent_groups:
+  - 'default'
+
+# Whether to auto-restart the agent after configuration changes
+wazuh_agent_auto_restart: 'yes'
+
+# Agent notification time (seconds) — how often agent sends keepalive to manager
+wazuh_agent_notify_time: 10
+
+# Time before the manager considers an agent disconnected (seconds)
+wazuh_agent_time_reconnect: 60
+
+# ---------------------------------------------------------------------------
+# Syscheck (File Integrity Monitoring) — Agent Side
+# ---------------------------------------------------------------------------
+# Enable or disable syscheck on the agent
+wazuh_agent_syscheck_enabled: 'yes'
+
+# Frequency of syscheck scans in seconds (default: 43200 = 12 hours)
+wazuh_agent_syscheck_frequency: 43200
+
+# Directories monitored by syscheck on agents
+wazuh_agent_syscheck_directories:
+  - '/etc'
+  - '/usr/bin'
+  - '/usr/sbin'
+  - '/bin'
+  - '/sbin'
+  - '/boot'
+
+# Files/directories to ignore during syscheck scans
+wazuh_agent_syscheck_ignore:
+  - '/etc/mtab'
+  - '/etc/hosts.deny'
+  - '/etc/mail/statistics'
+  - '/etc/random-seed'
+  - '/etc/adjtime'
+  - '/etc/prelink.cache'
+
+# ---------------------------------------------------------------------------
+# Rootcheck (Rootkit Detection) — Agent Side
+# ---------------------------------------------------------------------------
+# Enable or disable rootcheck on the agent
+wazuh_agent_rootcheck_enabled: 'yes'
+
+# ---------------------------------------------------------------------------
+# Log Collection (localfile entries on the agent)
+# ---------------------------------------------------------------------------
+wazuh_agent_localfiles:
+  - log_format: 'syslog'
+    location: '/var/log/syslog'         # Debian/Ubuntu
+  - log_format: 'syslog'
+    location: '/var/log/auth.log'       # Debian/Ubuntu
+  - log_format: 'syslog'
+    location: '/var/log/messages'       # RHEL/CentOS
+  - log_format: 'syslog'
+    location: '/var/log/secure'         # RHEL/CentOS
+  - log_format: 'syslog'
+    location: '/var/log/dpkg.log'       # Debian/Ubuntu package changes
+
+# ---------------------------------------------------------------------------
+# Active Response — Agent Side
+# ---------------------------------------------------------------------------
+# Enable or disable active response execution on the agent
+wazuh_agent_active_response_enabled: 'yes'
+
+# ---------------------------------------------------------------------------
+# SCA (Security Configuration Assessment) — Agent Side
+# ---------------------------------------------------------------------------
+# Enable or disable SCA checks on the agent
+wazuh_agent_sca_enabled: 'yes'
+
+# SCA scan interval in seconds
+wazuh_agent_sca_interval: '12h'

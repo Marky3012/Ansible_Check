@@ -1,0 +1,148 @@
+---
+# =============================================================================
+# Wazuh Manager Group Variables
+# Target OS: Ubuntu 24.04 / RHEL
+#
+# These variables apply to all hosts in the [wazuh_manager] group.
+# They control the manager's cluster role, ossec.conf modules, and API binding.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Cluster Settings
+# ---------------------------------------------------------------------------
+# Node type within the Wazuh cluster: 'master' or 'worker'
+wazuh_manager_node_type: 'master'
+
+# Unique name for this manager node (must differ across cluster nodes)
+wazuh_manager_node_name: 'manager-node-01'
+
+# Enable or disable cluster functionality
+# Set to 'yes' to disable clustering (single-node), 'no' to enable clustering
+wazuh_manager_cluster_disabled: 'no'
+
+# ---------------------------------------------------------------------------
+# API Configuration
+# ---------------------------------------------------------------------------
+# Network address the Wazuh API listens on
+# '0.0.0.0' = all interfaces; use a specific IP to restrict access
+wazuh_manager_api_bind: '0.0.0.0'
+
+# Enable HTTPS for the API (recommended for production)
+wazuh_manager_api_https: 'yes'
+
+# ---------------------------------------------------------------------------
+# Syscheck (File Integrity Monitoring)
+# ---------------------------------------------------------------------------
+# Enable or disable the syscheck module
+wazuh_manager_syscheck_enabled: 'yes'
+
+# Frequency of syscheck scans in seconds (default: 43200 = 12 hours)
+wazuh_manager_syscheck_frequency: 43200
+
+# Directories to monitor with syscheck (comma-separated on the manager)
+wazuh_manager_syscheck_directories:
+  - '/etc'
+  - '/usr/bin'
+  - '/usr/sbin'
+  - '/bin'
+  - '/sbin'
+  - '/boot'
+
+# Directories/files to ignore during syscheck scans
+wazuh_manager_syscheck_ignore:
+  - '/etc/mtab'
+  - '/etc/hosts.deny'
+  - '/etc/mail/statistics'
+  - '/etc/random-seed'
+  - '/etc/adjtime'
+  - '/etc/prelink.cache'
+
+# ---------------------------------------------------------------------------
+# Rootcheck (Rootkit Detection)
+# ---------------------------------------------------------------------------
+# Enable or disable the rootcheck module
+wazuh_manager_rootcheck_enabled: 'yes'
+
+# Frequency of rootcheck scans in seconds (default: 43200 = 12 hours)
+wazuh_manager_rootcheck_frequency: 43200
+
+# ---------------------------------------------------------------------------
+# Vulnerability Detector
+# ---------------------------------------------------------------------------
+# Enable or disable the vulnerability-detector module
+wazuh_manager_vulnerability_detector_enabled: 'yes'
+
+# Interval between vulnerability detection scans
+wazuh_manager_vulnerability_detector_interval: '5m'
+
+# Feed update interval for vulnerability databases
+wazuh_manager_vulnerability_detector_feed_update_interval: '6h'
+
+# Vulnerability detector providers to enable
+wazuh_manager_vulnerability_detector_providers:
+  - name: 'canonical'             # Ubuntu vulnerabilities (CVEs)
+    enabled: 'yes'
+    os:
+      - 'noble'                   # Ubuntu 24.04 codename
+  - name: 'redhat'               # RHEL vulnerabilities (CVEs)
+    enabled: 'yes'
+    os:
+      - '8'
+      - '9'
+  - name: 'nvd'                  # National Vulnerability Database
+    enabled: 'yes'
+
+# ---------------------------------------------------------------------------
+# Active Response
+# ---------------------------------------------------------------------------
+# Enable or disable active response globally on the manager
+wazuh_manager_active_response_enabled: 'yes'
+
+# Default active response configurations
+wazuh_manager_active_response_commands:
+  - name: 'host-deny'
+    command: 'host-deny'
+    location: 'local'
+    level: 6
+    timeout: 600                  # Block duration in seconds (10 min)
+  - name: 'firewall-drop'
+    command: 'firewall-drop'
+    location: 'local'
+    level: 6
+    timeout: 600
+
+# ---------------------------------------------------------------------------
+# Log Collection (ossec.conf <localfile> entries on the manager)
+# ---------------------------------------------------------------------------
+wazuh_manager_localfiles:
+  - log_format: 'syslog'
+    location: '/var/log/syslog'       # Debian/Ubuntu
+  - log_format: 'syslog'
+    location: '/var/log/auth.log'     # Debian/Ubuntu
+  - log_format: 'syslog'
+    location: '/var/log/messages'     # RHEL/CentOS
+  - log_format: 'syslog'
+    location: '/var/log/secure'       # RHEL/CentOS
+  - log_format: 'json'
+    location: '/var/log/wazuh/api.log'  # Wazuh API log
+
+# ---------------------------------------------------------------------------
+# Alerts Configuration
+# ---------------------------------------------------------------------------
+# Minimum alert level to store (1-16)
+wazuh_manager_alerts_log_level: 3
+
+# Minimum alert level to send via email (if email configured)
+wazuh_manager_email_alert_level: 12
+
+# Enable JSON alert output
+wazuh_manager_json_output: 'yes'
+
+# ---------------------------------------------------------------------------
+# Remote (Agent Connection Settings on the Manager)
+# ---------------------------------------------------------------------------
+# Protocol for agent-manager communication
+wazuh_manager_remote_protocol: 'tcp'
+
+# Allow agents with any IP to connect
+wazuh_manager_remote_allowed_ips: '0.0.0.0/0'

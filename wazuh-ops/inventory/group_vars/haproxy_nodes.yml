@@ -1,0 +1,58 @@
+---
+# ── HAProxy + Keepalived node vars ────────────────────────────────────────────
+# All values here are derived from the reference configs collected 2026-05-11.
+# Edit this file to adapt to any cluster size — do NOT hardcode IPs in templates.
+
+# ── HAProxy ───────────────────────────────────────────────────────────────────
+
+haproxy_global_log: /dev/log local0
+haproxy_daemon: true
+
+haproxy_defaults_mode: tcp
+haproxy_timeout_connect: 5s
+haproxy_timeout_client: 1m
+haproxy_timeout_server: 1m
+
+# Stats socket — enables per-server UP/DOWN queries from healthcheck role.
+# The haproxy.cfg.j2 template injects this into the global section.
+haproxy_stats_socket_path: /var/run/haproxy/admin.sock
+haproxy_stats_socket_mode: "660"
+haproxy_stats_socket_level: admin
+
+# Frontend
+haproxy_frontend_name: wazuh_front
+haproxy_frontend_bind: "*"
+haproxy_frontend_port: "{{ wazuh_agent_port }}"
+haproxy_frontend_mode: tcp
+
+# Backend
+haproxy_backend_name: wazuh_back
+haproxy_backend_mode: tcp
+haproxy_backend_balance: leastconn
+haproxy_backend_check: tcp-check
+haproxy_backend_server_port: "{{ wazuh_agent_port }}"
+
+# Backend server list is auto-built from the wazuh_managers inventory group
+# in haproxy.cfg.j2 — no manual list needed here.
+# Override haproxy_backend_server_port above if managers listen on a different port.
+
+# ── Keepalived ────────────────────────────────────────────────────────────────
+
+keepalived_vrrp_instance_name: VI_DC
+keepalived_interface: enp1s0          # NIC for VRRP traffic — same on all HA nodes
+keepalived_virtual_router_id: 51
+keepalived_advert_int: 1
+keepalived_auth_type: PASS
+keepalived_auth_pass: "{{ vault_keepalived_auth_pass }}"
+
+# VIP — the floating address agents connect to
+keepalived_virtual_ip: 172.21.1.120
+
+# check_haproxy.sh — copied to this path by wazuh_configure role
+keepalived_check_script_dest: /etc/keepalived/check_haproxy.sh
+keepalived_check_script_interval: 2
+keepalived_check_script_fall: 2
+keepalived_check_script_rise: 1
+
+# keepalived_node_state and keepalived_node_priority are set per-host in hosts.yml
+# so each node advertises the correct role without any extra logic here.

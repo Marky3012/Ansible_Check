@@ -1,0 +1,91 @@
+---
+# STAGE 2 — INVOKE POSTGRES FAILBACK
+# Rejoins the old primary as a streaming standby using repmgr force-rewind.
+# The new primary must already be healthy (confirmed by postgres_failover + validate).
+# Tags: recovery, invoke, postgres_failback
+
+- name: "[POSTGRES-FAILBACK] GATE — Assert required vars are set"
+  ansible.builtin.assert:
+    that:
+      - postgres_primary_host != ''
+      - postgres_standby_host != ''
+    fail_msg: >
+      postgres_failback requires:
+        -e "postgres_primary_host=<current-primary-hostname>"
+        -e "postgres_standby_host=<rejoining-old-primary-hostname>"
+  run_once: true
+  delegate_to: localhost
+  tags: [recovery, invoke, postgres_failback]
+
+# ── Verify new primary is healthy before rejoining ────────────────────────────
+- name: "[POSTGRES-FAILBACK] Verify current primary is accepting connections"
+  ansible.builtin.command:
+    cmd: "pg_isready -h {{ hostvars[postgres_primary_host]['ansible_host'] }} -p {{ postgres_port }} -t {{ postgres_pg_isready_timeout }}"
+  delegate_to: localhost
+  run_once: true
+  changed_when: false
+  register: pg_primary_ready
+  tags: [recovery, invoke, postgres_failback]
+
+- name: "[POSTGRES-FAILBACK] GATE — Abort if current primary is not ready"
+  ansible.builtin.fail:
+    msg: >
+      INVOKE GATE FAILED: Current primary {{ postgres_primary_host }} is not ready.
+      Cannot rejoin a standby when the primary is unhealthy.
+  when: pg_primary_ready.rc != 0
+  run_once: true
+  tags: [recovery, invoke, postgres_failback]
+
+# ── Deploy and run rejoin wrapper ─────────────────────────────────────────────
+- name: "[POSTGRES-FAILBACK] Ensure scripts dir on rejoining node"
+  ansible.builtin.file:
+    path: "{{ recovery_scripts_dest_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  delegate_to: "{{ postgres_standby_host }}"
+  run_once: true
+  tags: [recovery, invoke, postgres_failback]
+
+- name: "[POSTGRES-FAILBACK] Deploy postgres_rejoin_wrapper.sh"
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../scripts/wrappers/{{ postgres_rejoin_wrapper }}"
+    dest: "{{ recovery_scripts_dest_dir }}/{{ postgres_rejoin_wrapper }}"
+    owner: root
+    group: root
+    mode: "0750"
+  delegate_to: "{{ postgres_standby_host }}"
+  run_once: true
+  tags: [recovery, invoke, postgres_failback]
+
+- name: "[POSTGRES-FAILBACK] Rejoin old primary as standby (repmgr force-rewind)"
+  ansible.builtin.command:
+    cmd: "{{ recovery_scripts_dest_dir }}/{{ postgres_rejoin_wrapper }}"
+  environment:
+    REPMGR_CONF: "{{ postgres_repmgr_conf }}"
+    REPMGR_USER: "{{ postgres_repmgr_user }}"
+    NEW_PRIMARY_CONNINFO: >-
+      host={{ hostvars[postgres_primary_host]['ansible_host'] }}
+      port={{ postgres_port }}
+      user={{ postgres_repmgr_user }}
+      dbname={{ postgres_repmgr_db }}
+    REJOIN_TIMEOUT: "{{ postgres_stabilize_wait }}"
+  register: pg_rejoin_result
+  delegate_to: "{{ postgres_standby_host }}"
+  run_once: true
+  async: "{{ (postgres_stabilize_wait | int) + 60 }}"
+  poll: 10
+  tags: [recovery, invoke, postgres_failback]
+
+- name: "[POSTGRES-FAILBACK] GATE — Abort if rejoin wrapper failed"
+  ansible.builtin.fail:
+    msg: |
+      INVOKE GATE FAILED: postgres_rejoin_wrapper.sh exited {{ pg_rejoin_result.rc }}.
+      stdout: {{ pg_rejoin_result.stdout | default('') }}
+      stderr: {{ pg_rejoin_result.stderr | default('') }}
+  when:
+    - pg_rejoin_result.rc is defined
+    - pg_rejoin_result.rc != 0
+  run_once: true
+  tags: [recovery, invoke, postgres_failback]

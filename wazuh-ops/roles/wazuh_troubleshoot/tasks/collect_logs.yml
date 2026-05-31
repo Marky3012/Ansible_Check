@@ -1,0 +1,70 @@
+---
+# Collect logs from the remote host — never mutates state
+# Tags: troubleshoot, collect_logs
+
+- name: Collect HAProxy journal (haproxy_nodes only)
+  ansible.builtin.shell:
+    cmd: "journalctl -u haproxy -n {{ log_lines_to_collect }} --no-pager 2>/dev/null || tail -n {{ log_lines_to_collect }} /var/log/haproxy.log 2>/dev/null || echo 'LOG_UNAVAILABLE'"
+  register: haproxy_log
+  changed_when: false
+  when: inventory_hostname in groups['haproxy_nodes']
+  tags: [troubleshoot, collect_logs]
+
+- name: Collect Keepalived journal (haproxy_nodes only)
+  ansible.builtin.shell:
+    cmd: "journalctl -u keepalived -n {{ log_lines_to_collect }} --no-pager 2>/dev/null || echo 'LOG_UNAVAILABLE'"
+  register: keepalived_log
+  changed_when: false
+  when: inventory_hostname in groups['haproxy_nodes']
+  tags: [troubleshoot, collect_logs]
+
+- name: Collect Manager ossec.log (wazuh_managers only)
+  ansible.builtin.shell:
+    cmd: "tail -n {{ log_lines_to_collect }} {{ wazuh_log_dir }}/ossec.log 2>/dev/null || echo 'LOG_UNAVAILABLE'"
+  register: manager_log
+  changed_when: false
+  when: inventory_hostname in groups['wazuh_managers']
+  tags: [troubleshoot, collect_logs]
+
+- name: Collect Manager alerts.log tail (wazuh_managers only)
+  ansible.builtin.shell:
+    cmd: "tail -n 100 {{ wazuh_log_dir }}/alerts/alerts.log 2>/dev/null || echo 'LOG_UNAVAILABLE'"
+  register: alerts_log
+  changed_when: false
+  when: inventory_hostname in groups['wazuh_managers']
+  tags: [troubleshoot, collect_logs]
+
+- name: Ensure local fetch directory exists
+  ansible.builtin.file:
+    path: "{{ troubleshoot_fetch_dir }}/{{ inventory_hostname }}"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  tags: [troubleshoot, collect_logs]
+
+- name: Write HAProxy log to fetch dir
+  ansible.builtin.copy:
+    content: "{{ haproxy_log.stdout | default('') }}"
+    dest: "{{ troubleshoot_fetch_dir }}/{{ inventory_hostname }}/haproxy.log"
+    mode: "0644"
+  delegate_to: localhost
+  when: inventory_hostname in groups['haproxy_nodes']
+  tags: [troubleshoot, collect_logs]
+
+- name: Write Keepalived log to fetch dir
+  ansible.builtin.copy:
+    content: "{{ keepalived_log.stdout | default('') }}"
+    dest: "{{ troubleshoot_fetch_dir }}/{{ inventory_hostname }}/keepalived.log"
+    mode: "0644"
+  delegate_to: localhost
+  when: inventory_hostname in groups['haproxy_nodes']
+  tags: [troubleshoot, collect_logs]
+
+- name: Write Manager log to fetch dir
+  ansible.builtin.copy:
+    content: "{{ manager_log.stdout | default('') }}"
+    dest: "{{ troubleshoot_fetch_dir }}/{{ inventory_hostname }}/ossec.log"
+    mode: "0644"
+  delegate_to: localhost
+  when: inventory_hostname in groups['wazuh_managers']
+  tags: [troubleshoot, collect_logs]

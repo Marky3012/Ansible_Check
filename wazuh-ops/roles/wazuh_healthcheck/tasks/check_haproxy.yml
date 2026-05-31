@@ -1,0 +1,65 @@
+---
+# Check HAProxy: process state + per-backend server states via stats socket
+# Stats socket must be present (added by wazuh_configure role to haproxy.cfg)
+# Tags: healthcheck, check_haproxy
+
+- name: Check HAProxy service is active
+  ansible.builtin.command:
+    cmd: systemctl is-active haproxy
+  register: haproxy_service_check
+  changed_when: false
+  failed_when: false
+  tags: [healthcheck, check_haproxy]
+
+- name: Query HAProxy stats socket for backend server states
+  ansible.builtin.shell:
+    cmd: "echo 'show stat' | socat unix-connect:{{ haproxy_stats_socket }} stdio 2>/dev/null || echo 'SOCKET_ERROR'"
+  register: haproxy_stats_raw
+  changed_when: false
+  failed_when: false
+  tags: [healthcheck, check_haproxy]
+
+- name: Parse HAProxy backend server states
+  ansible.builtin.set_fact:
+    haproxy_backend_servers: >-
+      {{
+        haproxy_stats_raw.stdout_lines
+        | select('search', '^' + haproxy_backend_name + ',')
+        | reject('search', '^' + haproxy_backend_name + ',BACKEND,')
+        | map('split', ',')
+        | map('zip', ['pxname','svname','status'])
+        | list
+      }}
+  when: haproxy_stats_raw.stdout != 'SOCKET_ERROR'
+  tags: [healthcheck, check_haproxy]
+
+- name: Count DOWN backend servers
+  ansible.builtin.set_fact:
+    haproxy_down_servers: >-
+      {{
+        haproxy_stats_raw.stdout_lines
+        | select('search', '^' + haproxy_backend_name + ',')
+        | reject('search', '^' + haproxy_backend_name + ',BACKEND,')
+        | select('search', ',DOWN,')
+        | list
+        | length
+      }}
+  when: haproxy_stats_raw.stdout != 'SOCKET_ERROR'
+  tags: [healthcheck, check_haproxy]
+
+- name: Set HAProxy health fact
+  ansible.builtin.set_fact:
+    haproxy_status_entry:
+      host: "{{ inventory_hostname }}"
+      ip: "{{ ansible_host }}"
+      service_active: "{{ haproxy_service_check.rc == 0 }}"
+      stats_socket_available: "{{ haproxy_stats_raw.stdout != 'SOCKET_ERROR' }}"
+      down_servers: "{{ haproxy_down_servers | default(0) | int }}"
+      raw_stats_available: "{{ haproxy_stats_raw.stdout != 'SOCKET_ERROR' }}"
+      status: >-
+        {{
+          'DOWN' if haproxy_service_check.rc != 0
+          else 'DEGRADED' if (haproxy_down_servers | default(0) | int) > 0
+          else 'UP'
+        }}
+  tags: [healthcheck, check_haproxy]

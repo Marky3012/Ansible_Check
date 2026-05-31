@@ -1,0 +1,19 @@
+---
+# wazuh_autonomous — self-healing brain
+# Evaluates health, decides action, escalates if auto-recovery fails.
+# Runs from localhost (orchestrator) against all managed groups.
+
+- name: Gather minimal facts
+  ansible.builtin.setup:
+    gather_subset: [min]
+  delegate_to: localhost
+  run_once: true
+  tags: [autonomous]
+
+- name: "[AUTONOMOUS] Phase 1 — Evaluate health across all nodes"
+  ansible.builtin.include_tasks: evaluate_health.yml
+  tags: [autonomous, evaluate]
+
+- name: "[AUTONOMOUS] Phase 2 — Decide and act"
+  ansible.builtin.include_tasks: decide_action.yml
+  tags: [autonomous, decide]

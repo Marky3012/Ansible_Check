@@ -1,0 +1,20 @@
+---
+# ── wazuh_configure defaults ──────────────────────────────────────────────────
+
+# Feature flags — control which components get configured in a single run
+configure_haproxy: true
+configure_keepalived: true
+configure_manager: true
+configure_agents: false   # opt-in — agents are usually configured at enrollment
+
+# HAProxy config validation command (run before any reload)
+haproxy_validate_cmd: "haproxy -c -f %s"
+
+# Backup existing configs before templating
+config_backup: true
+
+# check_haproxy.sh source (relative to role)
+keepalived_check_script_src: check_haproxy.sh
+
+# ossec.conf validation (set to empty string to skip)
+wazuh_manager_config_check_cmd: "/var/ossec/bin/wazuh-control check"

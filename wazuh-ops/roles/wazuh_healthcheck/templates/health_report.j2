@@ -1,0 +1,24 @@
+================================================================================
+  WAZUH HEALTH REPORT — {{ health_summary.host }}
+  Generated : {{ health_summary.timestamp }}
+================================================================================
+
+COMPONENT        STATUS          DETAIL
+──────────────── ─────────────── ────────────────────────────────────────────
+{% if health_summary.manager.status != 'SKIPPED' %}
+Manager          {{ "%-15s" | format(health_summary.manager.status) }} TCP:{{ health_summary.manager.tcp_port_open }} API:{{ health_summary.manager.api_reachable }}
+{% endif %}
+{% if health_summary.agents.status != 'SKIPPED' %}
+Agents           {{ "%-15s" | format(health_summary.agents.status) }} Disconnected: {{ health_summary.agents.disconnected_count }}
+{% endif %}
+{% if health_summary.indexer.status != 'SKIPPED' %}
+Indexer          {{ "%-15s" | format(health_summary.indexer.status) }} Cluster: {{ health_summary.indexer.cluster_status | default('n/a') }} | Unassigned shards: {{ health_summary.indexer.unassigned_shards | default(0) }}
+{% endif %}
+{% if health_summary.haproxy.status != 'SKIPPED' %}
+HAProxy          {{ "%-15s" | format(health_summary.haproxy.status) }} Service: {{ health_summary.haproxy.service_active }} | DOWN backends: {{ health_summary.haproxy.down_servers }}
+{% endif %}
+{% if health_summary.keepalived.status != 'SKIPPED' %}
+Keepalived       {{ "%-15s" | format(health_summary.keepalived.status) }} Expected: {{ health_summary.keepalived.expected_state }} | Actual: {{ health_summary.keepalived.actual_state }} | VIP bound: {{ health_summary.keepalived.vip_bound }}
+{% endif %}
+
+================================================================================

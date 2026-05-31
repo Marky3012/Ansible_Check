@@ -1,0 +1,42 @@
+---
+# Check Keepalived: process state + VRRP state + VIP binding
+# Tags: healthcheck, check_keepalived
+
+- name: Check Keepalived service is active
+  ansible.builtin.command:
+    cmd: systemctl is-active keepalived
+  register: keepalived_service_check
+  changed_when: false
+  failed_when: false
+  tags: [healthcheck, check_keepalived]
+
+- name: Check if VIP is bound on this node
+  ansible.builtin.shell:
+    cmd: "ip addr show {{ keepalived_interface }} | grep -c '{{ keepalived_virtual_ip }}' || true"
+  register: vip_bound_check
+  changed_when: false
+  failed_when: false
+  tags: [healthcheck, check_keepalived]
+
+- name: Determine actual VRRP state from VIP presence
+  ansible.builtin.set_fact:
+    actual_vrrp_state: "{{ 'MASTER' if (vip_bound_check.stdout | trim | int) > 0 else 'BACKUP' }}"
+  tags: [healthcheck, check_keepalived]
+
+- name: Set Keepalived health fact
+  ansible.builtin.set_fact:
+    keepalived_status_entry:
+      host: "{{ inventory_hostname }}"
+      ip: "{{ ansible_host }}"
+      service_active: "{{ keepalived_service_check.rc == 0 }}"
+      vip_bound: "{{ (vip_bound_check.stdout | trim | int) > 0 }}"
+      expected_state: "{{ keepalived_node_state }}"
+      actual_state: "{{ actual_vrrp_state }}"
+      state_matches_expected: "{{ actual_vrrp_state == keepalived_node_state }}"
+      status: >-
+        {{
+          'DOWN' if keepalived_service_check.rc != 0
+          else 'SPLIT_BRAIN' if not (actual_vrrp_state == keepalived_node_state)
+          else 'UP'
+        }}
+  tags: [healthcheck, check_keepalived]

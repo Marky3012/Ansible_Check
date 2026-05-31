@@ -1,0 +1,166 @@
+---
+# STAGE 2 — INVOKE MANAGER FAILOVER
+# Strict fencing order (split-brain prevention):
+#   1. Auto-discover current master via Wazuh API (fallback to manager_original_master var)
+#   2. FENCE: stop wazuh-manager on the old master
+#   3. VERIFY FENCE: port 1516 not listening + no clusterd pidfile
+#   4. Promote candidate worker (wrapper on candidate node)
+# Tags: recovery, invoke, manager_failover
+
+# ── Step 1: Auto-discover current master ─────────────────────────────────────
+- name: "[MANAGER-FAILOVER] Query each manager for cluster role"
+  ansible.builtin.uri:
+    url: "https://{{ hostvars[item]['ansible_host'] }}:{{ wazuh_api_port }}/cluster/local/info"
+    method: GET
+    user: "{{ vault_wazuh_api_user }}"
+    password: "{{ vault_wazuh_api_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200, -1]
+    timeout: 5
+  register: mgr_role_query
+  loop: "{{ groups['wazuh_managers'] }}"
+  delegate_to: localhost
+  run_once: true
+  ignore_errors: true
+  tags: [recovery, invoke, manager_failover]
+
+- name: "[MANAGER-FAILOVER] Identify current master from API responses"
+  ansible.builtin.set_fact:
+    discovered_master: >-
+      {{
+        mgr_role_query.results
+        | selectattr('status', 'eq', 200)
+        | selectattr('json.data.type', 'defined')
+        | selectattr('json.data.type', 'eq', 'master')
+        | map(attribute='item')
+        | first
+        | default('')
+      }}
+  run_once: true
+  delegate_to: localhost
+  tags: [recovery, invoke, manager_failover]
+
+- name: "[MANAGER-FAILOVER] Resolve master (API result or operator override)"
+  ansible.builtin.set_fact:
+    resolved_master: "{{ manager_original_master if manager_original_master != '' else discovered_master }}"
+  run_once: true
+  delegate_to: localhost
+  tags: [recovery, invoke, manager_failover]
+
+- name: "[MANAGER-FAILOVER] GATE — Abort if master cannot be identified"
+  ansible.builtin.fail:
+    msg: >
+      INVOKE GATE FAILED: Could not auto-discover the current Wazuh cluster master
+      (all managers returned errors or none reported type=master).
+      Re-run with: -e "manager_original_master=wazuh-mgrX"
+  when: resolved_master == ''
+  run_once: true
+  delegate_to: localhost
+  tags: [recovery, invoke, manager_failover]
+
+- name: "[MANAGER-FAILOVER] GATE — Abort if promote candidate not specified"
+  ansible.builtin.fail:
+    msg: >
+      INVOKE GATE FAILED: manager_promote_candidate is not set.
+      Pass: -e "manager_promote_candidate=wazuh-mgrY"
+  when: manager_promote_candidate == ''
+  run_once: true
+  delegate_to: localhost
+  tags: [recovery, invoke, manager_failover]
+
+# ── Step 2: FENCE old master ──────────────────────────────────────────────────
+- name: "[MANAGER-FAILOVER] FENCE — Stop wazuh-manager on old master"
+  ansible.builtin.systemd:
+    name: "{{ wazuh_manager_service }}"
+    state: stopped
+  delegate_to: "{{ resolved_master }}"
+  run_once: true
+  tags: [recovery, invoke, manager_failover]
+
+# ── Step 3: VERIFY FENCE ──────────────────────────────────────────────────────
+- name: "[MANAGER-FAILOVER] VERIFY FENCE — Check cluster port not listening"
+  ansible.builtin.wait_for:
+    host: "{{ hostvars[resolved_master]['ansible_host'] }}"
+    port: "{{ wazuh_cluster_port }}"
+    state: stopped
+    timeout: 30
+  delegate_to: localhost
+  run_once: true
+  tags: [recovery, invoke, manager_failover]
+
+- name: "[MANAGER-FAILOVER] VERIFY FENCE — Confirm no wazuh-clusterd pidfile"
+  ansible.builtin.find:
+    paths: /var/ossec/var/run
+    patterns: "wazuh-clusterd-*.pid"
+  register: fence_pidfile_check
+  delegate_to: "{{ resolved_master }}"
+  run_once: true
+  tags: [recovery, invoke, manager_failover]
+
+- name: "[MANAGER-FAILOVER] GATE — Abort if clusterd pidfile still present"
+  ansible.builtin.fail:
+    msg: >
+      FENCE GATE FAILED: wazuh-clusterd pidfile still present on {{ resolved_master }}.
+      Service may not have stopped cleanly. Manual check required.
+  when: fence_pidfile_check.files | length > 0
+  run_once: true
+  tags: [recovery, invoke, manager_failover]
+
+# ── Step 4: Deploy and run promote wrapper on candidate ───────────────────────
+- name: "[MANAGER-FAILOVER] Ensure scripts dir on candidate"
+  ansible.builtin.file:
+    path: "{{ recovery_scripts_dest_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  delegate_to: "{{ manager_promote_candidate }}"
+  run_once: true
+  tags: [recovery, invoke, manager_failover]
+
+- name: "[MANAGER-FAILOVER] Deploy manager_promote_wrapper.sh to candidate"
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../scripts/wrappers/{{ manager_promote_wrapper }}"
+    dest: "{{ recovery_scripts_dest_dir }}/{{ manager_promote_wrapper }}"
+    owner: root
+    group: root
+    mode: "0750"
+  delegate_to: "{{ manager_promote_candidate }}"
+  run_once: true
+  tags: [recovery, invoke, manager_failover]
+
+- name: "[MANAGER-FAILOVER] Promote candidate to master"
+  ansible.builtin.command:
+    cmd: "{{ recovery_scripts_dest_dir }}/{{ manager_promote_wrapper }}"
+  environment:
+    OSSEC_CONF: "{{ manager_ossec_conf }}"
+    MANAGER_SERVICE: "{{ wazuh_manager_service }}"
+    CLUSTER_KEY: "{{ vault_wazuh_cluster_key }}"
+    START_TIMEOUT: "{{ manager_stabilize_wait }}"
+  register: manager_promote_result
+  delegate_to: "{{ manager_promote_candidate }}"
+  run_once: true
+  async: "{{ (manager_stabilize_wait | int) + 30 }}"
+  poll: 5
+  tags: [recovery, invoke, manager_failover]
+
+- name: "[MANAGER-FAILOVER] GATE — Abort if promote wrapper failed"
+  ansible.builtin.fail:
+    msg: |
+      INVOKE GATE FAILED: manager_promote_wrapper.sh exited {{ manager_promote_result.rc }}.
+      stdout: {{ manager_promote_result.stdout | default('') }}
+      stderr: {{ manager_promote_result.stderr | default('') }}
+  when:
+    - manager_promote_result.rc is defined
+    - manager_promote_result.rc != 0
+  run_once: true
+  tags: [recovery, invoke, manager_failover]
+
+- name: "[MANAGER-FAILOVER] Record resolved master and candidate for validate stage"
+  ansible.builtin.set_fact:
+    manager_fenced_node: "{{ resolved_master }}"
+    manager_new_master: "{{ manager_promote_candidate }}"
+  run_once: true
+  delegate_to: localhost
+  tags: [recovery, invoke, manager_failover]

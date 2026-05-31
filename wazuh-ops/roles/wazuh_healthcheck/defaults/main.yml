@@ -1,0 +1,34 @@
+---
+# ── wazuh_healthcheck defaults ────────────────────────────────────────────────
+
+# Feature flags — disable individual checks without touching tasks
+enable_manager_check: true
+enable_agent_check: true
+enable_indexer_check: true
+enable_haproxy_check: true
+enable_keepalived_check: true
+
+# Thresholds
+# A check is "critical" if status is in this list
+critical_statuses:
+  - "DOWN"
+  - "UNREACHABLE"
+  - "RED"
+
+# Number of disconnected agents that counts as a warning (not critical)
+agent_disconnect_warning_threshold: 3
+# Number that counts as critical
+agent_disconnect_critical_threshold: 10
+
+# Indexer cluster health: green | yellow | red — anything worse than this is critical
+indexer_min_health: yellow
+
+# Timeouts (seconds) for TCP/HTTP connectivity tests
+check_tcp_timeout: 5
+check_http_timeout: 10
+
+# HAProxy stats socket path (must match haproxy_stats_socket_path in group_vars)
+haproxy_stats_socket: /var/run/haproxy/admin.sock
+
+# Report output paths (evaluated at runtime — ansible_date_time injected in tasks)
+report_dir: "{{ playbook_dir }}/../reports"

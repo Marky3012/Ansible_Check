@@ -1,0 +1,30 @@
+---
+# =============================================================================
+# wazuh_manager - Role Metadata
+# =============================================================================
+
+galaxy_info:
+  role_name: wazuh_manager
+  author: TechBridge
+  description: >-
+    Installs and configures the Wazuh Manager (OSSEC fork) with a fully
+    templated ossec.conf. Supports cluster mode, syscheck, rootcheck,
+    vulnerability detection, active-response, and the Wazuh REST API.
+  license: MIT
+  min_ansible_version: '2.14'
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble   # 24.04
+    - name: EL
+      versions:
+        - '8'
+        - '9'
+  galaxy_tags:
+    - wazuh
+    - security
+    - siem
+    - manager
+
+dependencies:
+  - role: wazuh_common

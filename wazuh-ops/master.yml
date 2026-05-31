@@ -1,0 +1,69 @@
+---
+# ── wazuh-ops master entrypoint ───────────────────────────────────────────────
+#
+# Usage:
+#   ansible-playbook master.yml -e "mode=healthcheck"
+#   ansible-playbook master.yml -e "mode=configure"
+#   ansible-playbook master.yml -e "mode=troubleshoot"
+#   ansible-playbook master.yml -e "mode=recovery op=failover"
+#   ansible-playbook master.yml -e "mode=recovery op=failback"
+#   ansible-playbook master.yml -e "mode=autonomous"
+#   ansible-playbook master.yml -e "mode=agent_ops"
+#
+# Dry run (never mutates):
+#   ansible-playbook master.yml -e "mode=healthcheck" --check
+#
+# Syntax check:
+#   ansible-playbook master.yml -e "mode=healthcheck" --syntax-check
+
+- name: Validate mode and print run header
+  hosts: localhost
+  gather_facts: true
+  vars_files:
+    - vars/vault.yml
+  vars:
+    valid_modes:
+      - healthcheck
+      - configure
+      - troubleshoot
+      - recovery
+      - autonomous
+      - agent_ops
+  tasks:
+    - name: Assert mode is provided
+      ansible.builtin.assert:
+        that:
+          - mode is defined
+          - mode | length > 0
+        fail_msg: |
+          ERROR: 'mode' is required.
+          Usage: ansible-playbook master.yml -e "mode=<mode>"
+          Valid modes: {{ valid_modes | join(', ') }}
+
+    - name: Assert mode is valid
+      ansible.builtin.assert:
+        that:
+          - mode in valid_modes
+        fail_msg: |
+          ERROR: '{{ mode }}' is not a valid mode.
+          Valid modes: {{ valid_modes | join(', ') }}
+
+    - name: Assert op is set for recovery mode
+      ansible.builtin.assert:
+        that:
+          - op is defined
+          - op in ['failover', 'failback']
+        fail_msg: "ERROR: mode=recovery requires -e op=failover or -e op=failback"
+      when: mode == 'recovery'
+
+    - name: Print run header
+      ansible.builtin.debug:
+        msg:
+          mode: "{{ mode }}"
+          op: "{{ op | default('N/A') }}"
+          timestamp: "{{ ansible_date_time.iso8601 }}"
+          operator: "{{ lookup('env', 'USER') | default(lookup('env', 'USERNAME'), true) }}"
+          inventory: "{{ inventory_file }}"
+
+- name: Import selected playbook
+  ansible.builtin.import_playbook: "playbooks/{{ mode }}.yml"

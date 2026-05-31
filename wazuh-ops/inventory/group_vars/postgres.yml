@@ -1,0 +1,22 @@
+---
+# ── PostgreSQL HA via repmgr ───────────────────────────────────────────────────
+# All values are defaults — override per-host in hosts.yml if needed.
+
+postgres_service: postgresql
+
+postgres_port: 5432
+
+# repmgr connection details
+postgres_repmgr_user: repmgr
+postgres_repmgr_db: repmgr
+postgres_repmgr_conf: /etc/repmgr.conf
+
+# Data and socket paths — used for fencing verification
+postgres_data_dir: /var/lib/postgresql/data
+postgres_socket_dir: /var/run/postgresql
+
+# Readiness check timeout (seconds) passed to pg_isready
+postgres_pg_isready_timeout: 10
+
+# Replication lag warning threshold in bytes (default: 1 MiB)
+postgres_max_lag_bytes: 1048576

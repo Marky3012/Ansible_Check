@@ -1,0 +1,90 @@
+---
+# STAGE 2 — INVOKE INDEXER FAILBACK
+# Brings a previously-excluded indexer node back into the cluster:
+#   1. Start wazuh-indexer on returning node (wrapper)
+#   2. Remove voting config exclusion (API)
+#   3. Clear shard allocation exclusion (API)
+# Tags: recovery, invoke, indexer_failback
+
+- name: "[INDEXER-FAILBACK] Deploy failback wrapper to returning node"
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../scripts/wrappers/{{ indexer_failback_wrapper }}"
+    dest: "{{ recovery_scripts_dest_dir }}/{{ indexer_failback_wrapper }}"
+    owner: root
+    group: root
+    mode: "0750"
+  delegate_to: "{{ indexer_returning_node }}"
+  run_once: true
+  tags: [recovery, invoke, indexer_failback]
+
+- name: "[INDEXER-FAILBACK] Ensure scripts dir exists on returning node"
+  ansible.builtin.file:
+    path: "{{ recovery_scripts_dest_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  delegate_to: "{{ indexer_returning_node }}"
+  run_once: true
+  tags: [recovery, invoke, indexer_failback]
+
+- name: "[INDEXER-FAILBACK] Start wazuh-indexer on returning node"
+  ansible.builtin.command:
+    cmd: "{{ recovery_scripts_dest_dir }}/{{ indexer_failback_wrapper }}"
+  environment:
+    INDEXER_SERVICE: "{{ wazuh_indexer_service }}"
+    INDEXER_HTTP_PORT: "{{ wazuh_indexer_port }}"
+    JOIN_TIMEOUT: "{{ indexer_join_timeout }}"
+  register: indexer_start_result
+  delegate_to: "{{ indexer_returning_node }}"
+  run_once: true
+  async: "{{ (indexer_join_timeout | int) + 30 }}"
+  poll: 10
+  tags: [recovery, invoke, indexer_failback]
+
+- name: "[INDEXER-FAILBACK] GATE — Abort if service start failed"
+  ansible.builtin.fail:
+    msg: |
+      INVOKE GATE FAILED: indexer_failback_wrapper.sh exited {{ indexer_start_result.rc }}.
+      stdout: {{ indexer_start_result.stdout | default('') }}
+      stderr: {{ indexer_start_result.stderr | default('') }}
+  when:
+    - indexer_start_result.rc is defined
+    - indexer_start_result.rc != 0
+  run_once: true
+  tags: [recovery, invoke, indexer_failback]
+
+# ── Remove API exclusions ─────────────────────────────────────────────────────
+- name: "[INDEXER-FAILBACK] Remove voting config exclusions"
+  ansible.builtin.uri:
+    url: "{{ wazuh_indexer_api_scheme }}://{{ hostvars[indexer_surviving_node]['ansible_host'] }}:{{ wazuh_indexer_port }}/_cluster/voting_config_exclusions"
+    method: DELETE
+    user: "{{ vault_wazuh_indexer_user }}"
+    password: "{{ vault_wazuh_indexer_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ wazuh_indexer_validate_certs }}"
+    ca_path: "{{ wazuh_indexer_ca_cert | default(omit) }}"
+    status_code: [200, 404]
+    timeout: 30
+  delegate_to: localhost
+  run_once: true
+  tags: [recovery, invoke, indexer_failback]
+
+- name: "[INDEXER-FAILBACK] Clear shard allocation exclusion"
+  ansible.builtin.uri:
+    url: "{{ wazuh_indexer_api_scheme }}://{{ hostvars[indexer_surviving_node]['ansible_host'] }}:{{ wazuh_indexer_port }}/_cluster/settings"
+    method: PUT
+    user: "{{ vault_wazuh_indexer_user }}"
+    password: "{{ vault_wazuh_indexer_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ wazuh_indexer_validate_certs }}"
+    ca_path: "{{ wazuh_indexer_ca_cert | default(omit) }}"
+    body_format: json
+    body:
+      transient:
+        cluster.routing.allocation.exclude._name: null
+    status_code: 200
+    timeout: 30
+  delegate_to: localhost
+  run_once: true
+  tags: [recovery, invoke, indexer_failback]

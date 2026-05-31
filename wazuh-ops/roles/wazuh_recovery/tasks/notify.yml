@@ -1,0 +1,41 @@
+---
+# STAGE 4 — NOTIFY
+# Dispatches notification based on notification_target var.
+# Supports: slack | log
+# Tags: recovery, notify
+
+- name: "[NOTIFY] Send Slack notification"
+  ansible.builtin.uri:
+    url: "{{ vault_notification_webhook }}"
+    method: POST
+    body_format: json
+    body:
+      text: |
+        *Recovery {{ recovery_op | upper }} — {{ 'SUCCESS' if (recovery_validation.haproxy_active | default(false)) else 'FAILED' }}*
+        Host      : {{ inventory_hostname }}
+        Timestamp : {{ ansible_date_time.iso8601 }}
+        HAProxy   : {{ 'active' if recovery_validation.haproxy_active | default(false) else 'INACTIVE' }}
+        VIP       : {{ 'present' if recovery_validation.vip_present | default(false) else 'ABSENT' }}
+        Backends  : {{ 'all UP' if recovery_validation.backends_up | default(false) else 'some DOWN' }}
+    status_code: 200
+  when:
+    - notification_target == 'slack'
+    - vault_notification_webhook != 'VAULT_PLACEHOLDER'
+  run_once: true
+  delegate_to: localhost
+  failed_when: false
+  tags: [recovery, notify]
+
+- name: "[NOTIFY] Log notification (fallback)"
+  ansible.builtin.debug:
+    msg:
+      event: "recovery_{{ recovery_op }}"
+      status: "{{ 'SUCCESS' if (recovery_validation.haproxy_active | default(false)) else 'FAILED' }}"
+      host: "{{ inventory_hostname }}"
+      timestamp: "{{ ansible_date_time.iso8601 }}"
+      haproxy_active: "{{ recovery_validation.haproxy_active | default(false) }}"
+      vip_present: "{{ recovery_validation.vip_present | default(false) }}"
+      backends_up: "{{ recovery_validation.backends_up | default(false) }}"
+  when: notification_target == 'log' or notification_target != 'slack'
+  run_once: true
+  tags: [recovery, notify]

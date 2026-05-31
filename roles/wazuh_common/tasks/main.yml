@@ -1,0 +1,153 @@
+---
+# =============================================================================
+# wazuh_common - Tasks
+# =============================================================================
+# Tasks to prepare a host for any Wazuh component:
+# 1. Gather OS facts
+# 2. Install prerequisite packages
+# 3. Add the Wazuh GPG key and repository
+# 4. Update the package cache
+# 5. Optionally configure firewall rules
+# 6. Create common directories
+
+# ---------------------------------------------------------------------------
+# 1. Gather OS facts
+# ---------------------------------------------------------------------------
+- name: Gather OS facts
+  ansible.builtin.setup:
+    gather_subset:
+      - '!all'
+      - 'os_family'
+      - 'distribution'
+      - 'distribution_major_version'
+  tags:
+    - always
+
+# ---------------------------------------------------------------------------
+# 2. Install prerequisite packages
+# ---------------------------------------------------------------------------
+- name: Install prerequisite packages (Debian/Ubuntu)
+  ansible.builtin.apt:
+    name: "{{ wazuh_common_packages_debian }}"
+    state: present
+    update_cache: yes
+    cache_valid_time: 3600
+  when: ansible_os_family == 'Debian'
+  tags:
+    - prereqs
+
+- name: Install prerequisite packages (RedHat/CentOS)
+  ansible.builtin.yum:
+    name: "{{ wazuh_common_packages_redhat }}"
+    state: present
+  when: ansible_os_family == 'RedHat'
+  tags:
+    - prereqs
+
+# ---------------------------------------------------------------------------
+# 3. Add Wazuh GPG key
+# ---------------------------------------------------------------------------
+- name: Add Wazuh GPG key (Debian/Ubuntu)
+  ansible.builtin.apt_key:
+    url: "{{ wazuh_repo_gpg_key_url }}"
+    state: present
+  when: ansible_os_family == 'Debian'
+  tags:
+    - repo
+
+- name: Add Wazuh GPG key (RedHat/CentOS)
+  ansible.builtin.rpm_key:
+    key: "{{ wazuh_repo_gpg_key_url }}"
+    state: present
+  when: ansible_os_family == 'RedHat'
+  tags:
+    - repo
+
+# ---------------------------------------------------------------------------
+# 4. Add Wazuh repository
+# ---------------------------------------------------------------------------
+- name: Add Wazuh APT repository (Debian/Ubuntu)
+  ansible.builtin.apt_repository:
+    repo: "{{ wazuh_repo_apt_url }}"
+    state: present
+    filename: 'wazuh'
+    update_cache: no
+  when: ansible_os_family == 'Debian'
+  tags:
+    - repo
+
+- name: Add Wazuh YUM repository (RedHat/CentOS)
+  ansible.builtin.yum_repository:
+    name: wazuh
+    description: "Wazuh {{ wazuh_major_version }} repository"
+    baseurl: "{{ wazuh_repo_yum_url }}"
+    gpgcheck: yes
+    gpgkey: "{{ wazuh_repo_gpg_key_url }}"
+    enabled: yes
+  when: ansible_os_family == 'RedHat'
+  tags:
+    - repo
+
+# ---------------------------------------------------------------------------
+# 5. Update package cache
+# ---------------------------------------------------------------------------
+- name: Update APT package cache (Debian/Ubuntu)
+  ansible.builtin.apt:
+    update_cache: yes
+  when: ansible_os_family == 'Debian'
+  changed_when: false
+  tags:
+    - repo
+
+- name: Update YUM package cache (RedHat/CentOS)
+  ansible.builtin.yum:
+    update_cache: yes
+  when: ansible_os_family == 'RedHat'
+  changed_when: false
+  tags:
+    - repo
+
+# ---------------------------------------------------------------------------
+# 6. Configure firewall (optional)
+# ---------------------------------------------------------------------------
+- name: Allow Wazuh ports through UFW (Debian/Ubuntu)
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.port | string }}"
+    proto: "{{ item.proto }}"
+    comment: "{{ item.description }}"
+  loop: "{{ wazuh_common_ports }}"
+  when:
+    - firewall_enabled | bool
+    - ansible_os_family == 'Debian'
+  notify: Reload UFW
+  tags:
+    - firewall
+
+- name: Allow Wazuh ports through firewalld (RedHat/CentOS)
+  ansible.posix.firewalld:
+    port: "{{ item.port }}/{{ item.proto }}"
+    permanent: yes
+    immediate: yes
+    state: enabled
+  loop: "{{ wazuh_common_ports }}"
+  when:
+    - firewall_enabled | bool
+    - ansible_os_family == 'RedHat'
+  notify: Reload firewalld
+  tags:
+    - firewall
+
+# ---------------------------------------------------------------------------
+# 7. Create common directories
+# ---------------------------------------------------------------------------
+- name: Create common Wazuh directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0750'
+  loop: "{{ wazuh_common_directories }}"
+  tags:
+    - prereqs

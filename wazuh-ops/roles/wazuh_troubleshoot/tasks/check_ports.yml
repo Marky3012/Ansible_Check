@@ -1,0 +1,34 @@
+---
+# Probe all critical ports from the control node — read-only
+# Tags: troubleshoot, check_ports
+
+- name: Probe ports from control node
+  ansible.builtin.wait_for:
+    host: "{{ item.host | default(ansible_host) }}"
+    port: "{{ item.port }}"
+    timeout: 5
+    state: started
+  loop: "{{ ports_to_check }}"
+  loop_control:
+    label: "{{ item.name }}:{{ item.port }}"
+  register: port_probe_results
+  failed_when: false
+  delegate_to: localhost
+  tags: [troubleshoot, check_ports]
+
+- name: Build port status summary
+  ansible.builtin.set_fact:
+    port_status: >-
+      {{
+        port_status | default({}) | combine({
+          item.item.name: {
+            'port': item.item.port,
+            'host': item.item.host | default(ansible_host),
+            'open': item.state is defined and item.state == 'started'
+          }
+        })
+      }}
+  loop: "{{ port_probe_results.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  tags: [troubleshoot, check_ports]

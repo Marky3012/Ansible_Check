@@ -1,0 +1,30 @@
+---
+# Compress all collected artifacts into a single tarball on the control node
+# Tags: troubleshoot, bundle_artifact
+
+- name: Write troubleshoot JSON report
+  ansible.builtin.template:
+    src: troubleshoot_report.j2
+    dest: "{{ troubleshoot_fetch_dir }}/{{ inventory_hostname }}/report.txt"
+    mode: "0644"
+  delegate_to: localhost
+  tags: [troubleshoot, bundle_artifact]
+
+- name: Bundle artifacts into tarball
+  ansible.builtin.command:
+    cmd: >
+      tar -czf
+      {{ report_dir }}/troubleshoot_{{ inventory_hostname }}_{{ ansible_date_time.iso8601_basic_short }}.tar.gz
+      -C {{ report_dir }}
+      troubleshoot_{{ ansible_date_time.iso8601_basic_short }}/{{ inventory_hostname }}
+  delegate_to: localhost
+  when: bundle_artifacts | bool
+  changed_when: true
+  tags: [troubleshoot, bundle_artifact]
+
+- name: Report bundle location
+  ansible.builtin.debug:
+    msg: "Troubleshoot bundle: {{ report_dir }}/troubleshoot_{{ inventory_hostname }}_{{ ansible_date_time.iso8601_basic_short }}.tar.gz"
+  delegate_to: localhost
+  when: bundle_artifacts | bool
+  tags: [troubleshoot, bundle_artifact]

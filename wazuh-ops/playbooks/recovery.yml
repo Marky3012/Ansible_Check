@@ -1,0 +1,12 @@
+---
+# ansible-playbook master.yml -e "mode=recovery op=failover"
+# ansible-playbook master.yml -e "mode=recovery op=failback"
+# Requires: -e op=failover OR -e op=failback
+# Mutates state — confirm before running in production.
+
+- name: Recovery — HA nodes
+  hosts: haproxy_nodes
+  gather_facts: false
+  serial: 1
+  roles:
+    - wazuh_recovery

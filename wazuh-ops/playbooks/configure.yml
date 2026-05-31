@@ -1,0 +1,18 @@
+---
+# ansible-playbook master.yml -e "mode=configure"
+# Pushes config to all relevant nodes. Validates before reload.
+# Use --tags to target a single component, e.g. --tags configure_haproxy
+
+- name: Configure — HA nodes
+  hosts: haproxy_nodes
+  gather_facts: false
+  serial: 1
+  roles:
+    - wazuh_configure
+
+- name: Configure — Manager nodes
+  hosts: wazuh_managers
+  gather_facts: false
+  serial: 1
+  roles:
+    - wazuh_configure

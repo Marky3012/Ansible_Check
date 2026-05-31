@@ -1,0 +1,72 @@
+# =============================================================================
+# Wazuh Indexer (OpenSearch) Configuration
+# =============================================================================
+# Managed by Ansible - DO NOT EDIT MANUALLY
+# Template: roles/wazuh_indexer/templates/opensearch.yml.j2
+# =============================================================================
+
+# -------------------------
+# Cluster Settings
+# -------------------------
+cluster.name: {{ wazuh_indexer_cluster_name }}
+node.name: {{ wazuh_indexer_node_name }}
+
+# -------------------------
+# Network Settings
+# -------------------------
+network.host: {{ wazuh_indexer_network_host }}
+http.port: {{ wazuh_indexer_http_port }}
+transport.port: {{ wazuh_indexer_transport_port }}
+
+# -------------------------
+# Path Settings
+# -------------------------
+path.data: {{ wazuh_indexer_path_data }}
+path.logs: {{ wazuh_indexer_path_logs }}
+
+# -------------------------
+# Discovery & Cluster Formation
+# -------------------------
+discovery.seed_hosts:
+{% for host in wazuh_indexer_discovery_seed_hosts %}
+  - {{ host }}
+{% endfor %}
+
+cluster.initial_master_nodes:
+{% for node in wazuh_indexer_initial_master_nodes %}
+  - {{ node }}
+{% endfor %}
+
+# -------------------------
+# Security Plugin Configuration
+# -------------------------
+{% if wazuh_indexer_security_enabled | bool %}
+plugins.security.disabled: false
+
+# Transport layer TLS (inter-node communication)
+plugins.security.ssl.transport.pemcert_filepath: {{ wazuh_indexer_ssl_transport_pemcert }}
+plugins.security.ssl.transport.pemkey_filepath: {{ wazuh_indexer_ssl_transport_pemkey }}
+plugins.security.ssl.transport.pemtrustedcas_filepath: {{ wazuh_indexer_ssl_transport_pemtrustedcas }}
+plugins.security.ssl.transport.enforce_hostname_verification: {{ wazuh_indexer_ssl_transport_enforce_hostname_verification | lower }}
+
+# HTTP layer TLS (REST API)
+plugins.security.ssl.http.enabled: {{ wazuh_indexer_ssl_http_enabled | lower }}
+plugins.security.ssl.http.pemcert_filepath: {{ wazuh_indexer_ssl_http_pemcert }}
+plugins.security.ssl.http.pemkey_filepath: {{ wazuh_indexer_ssl_http_pemkey }}
+plugins.security.ssl.http.pemtrustedcas_filepath: {{ wazuh_indexer_ssl_http_pemtrustedcas }}
+
+# Admin DN for securityadmin operations
+plugins.security.authcz.admin_dn:
+  - "CN=admin,OU=Wazuh,O=Wazuh,L=California,C=US"
+
+plugins.security.nodes_dn:
+  - "CN={{ wazuh_indexer_node_name }},OU=Wazuh,O=Wazuh,L=California,C=US"
+{% else %}
+# Security plugin disabled for initial setup
+plugins.security.disabled: true
+{% endif %}
+
+# -------------------------
+# Compatibility
+# -------------------------
+compatibility.override_main_response_version: true

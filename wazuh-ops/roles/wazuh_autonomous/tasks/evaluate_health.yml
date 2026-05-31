@@ -1,0 +1,52 @@
+---
+# Run the full healthcheck role and capture health_summary for decision logic
+# Tags: autonomous, evaluate
+
+- name: "[EVALUATE] Run full healthcheck"
+  ansible.builtin.include_role:
+    name: wazuh_healthcheck
+  tags: [autonomous, evaluate]
+
+- name: "[EVALUATE] Determine if any manager is DOWN"
+  ansible.builtin.set_fact:
+    any_manager_down: >-
+      {{
+        groups['wazuh_managers']
+        | map('extract', hostvars, 'manager_status_entry')
+        | selectattr('status', 'eq', 'DOWN')
+        | list
+        | length > 0
+      }}
+  tags: [autonomous, evaluate]
+
+- name: "[EVALUATE] Determine if config drift exists on any HA node"
+  ansible.builtin.set_fact:
+    any_config_drift: >-
+      {{
+        groups['haproxy_nodes']
+        | map('extract', hostvars, 'config_drift')
+        | selectattr('haproxy.drifted', 'eq', true)
+        | list
+        | length > 0
+        or
+        groups['haproxy_nodes']
+        | map('extract', hostvars, 'config_drift')
+        | selectattr('keepalived.drifted', 'eq', true)
+        | list
+        | length > 0
+      }}
+  failed_when: false
+  tags: [autonomous, evaluate]
+
+- name: "[EVALUATE] Determine if indexer is RED"
+  ansible.builtin.set_fact:
+    indexer_is_red: >-
+      {{
+        groups['wazuh_indexers'] | length > 0 and
+        groups['wazuh_indexers']
+        | map('extract', hostvars, 'indexer_status_entry')
+        | selectattr('status', 'eq', 'RED')
+        | list
+        | length > 0
+      }}
+  tags: [autonomous, evaluate]

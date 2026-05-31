@@ -1,0 +1,103 @@
+---
+# =============================================================================
+# Wazuh Indexer Group Variables
+# Target OS: Ubuntu 24.04 / RHEL
+#
+# These variables apply to all hosts in the [wazuh_indexer] group.
+# They control OpenSearch-based indexer settings: cluster, JVM, TLS, discovery.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Cluster Settings
+# ---------------------------------------------------------------------------
+# Name of the Wazuh Indexer (OpenSearch) cluster
+wazuh_indexer_cluster_name: 'wazuh-indexer-cluster'
+
+# Unique name for this indexer node (override per-host in hosts.yml for multi-node)
+wazuh_indexer_node_name: 'indexer-node-01'
+
+# Network host the indexer binds to
+# '0.0.0.0' = all interfaces; use a specific IP for production hardening
+wazuh_indexer_network_host: '0.0.0.0'
+
+# HTTP port for REST API access (queries, indexing)
+wazuh_indexer_http_port: 9200
+
+# Transport port for inter-node communication within the indexer cluster
+wazuh_indexer_transport_port: 9300
+
+# ---------------------------------------------------------------------------
+# JVM Heap Settings
+# ---------------------------------------------------------------------------
+# JVM heap size for the indexer process
+# Recommended: set to 50% of available RAM, but no more than ~31g
+# For small/test environments, 1g is sufficient; production: 4g–16g
+wazuh_indexer_jvm_heap: '1g'
+
+# ---------------------------------------------------------------------------
+# TLS / Certificate Paths
+# ---------------------------------------------------------------------------
+# Root CA certificate for verifying indexer and transport layer TLS
+wazuh_indexer_tls_ca: '/etc/wazuh-indexer/certs/root-ca.pem'
+
+# Node certificate for this indexer instance
+wazuh_indexer_tls_cert: '/etc/wazuh-indexer/certs/indexer.pem'
+
+# Node private key for this indexer instance
+wazuh_indexer_tls_key: '/etc/wazuh-indexer/certs/indexer-key.pem'
+
+# Enable TLS for the HTTP layer (REST API)
+wazuh_indexer_tls_http_enabled: true
+
+# Enable TLS for the transport layer (inter-node communication)
+wazuh_indexer_tls_transport_enabled: true
+
+# Enforce hostname verification on transport layer connections
+wazuh_indexer_tls_enforce_hostname_verification: false
+
+# ---------------------------------------------------------------------------
+# Discovery & Cluster Formation
+# ---------------------------------------------------------------------------
+# Seed hosts for cluster node discovery
+# List the transport addresses (host:port) of all indexer nodes in the cluster
+wazuh_indexer_discovery_seed_hosts:
+  - '10.0.1.20:9300'       # wazuh-indexer-01 — replace with actual IP
+  # - '10.0.1.21:9300'     # wazuh-indexer-02 — uncomment for multi-node
+  # - '10.0.1.22:9300'     # wazuh-indexer-03 — uncomment for multi-node
+
+# Initial master-eligible nodes for bootstrapping the cluster
+# Use the node names (not IPs) matching wazuh_indexer_node_name per host
+wazuh_indexer_initial_master_nodes:
+  - 'indexer-node-01'
+  # - 'indexer-node-02'    # Uncomment for multi-node cluster
+  # - 'indexer-node-03'    # Uncomment for multi-node cluster
+
+# ---------------------------------------------------------------------------
+# Index Management
+# ---------------------------------------------------------------------------
+# Number of primary shards per index (default for Wazuh indices)
+wazuh_indexer_number_of_shards: 1
+
+# Number of replica shards per index (set to 0 for single-node, 1+ for HA)
+wazuh_indexer_number_of_replicas: 0
+
+# ---------------------------------------------------------------------------
+# Security Plugin (OpenSearch Security)
+# ---------------------------------------------------------------------------
+# Admin DN — distinguished name of the admin certificate for security plugin
+wazuh_indexer_admin_dn: 'CN=admin,OU=Wazuh,O=Wazuh,L=California,C=US'
+
+# Node DN — distinguished name pattern for cluster node certificates
+wazuh_indexer_nodes_dn: 'CN=indexer-node-*,OU=Wazuh,O=Wazuh,L=California,C=US'
+
+# ---------------------------------------------------------------------------
+# Performance Tuning
+# ---------------------------------------------------------------------------
+# Maximum number of open file descriptors (must be at least 65535)
+wazuh_indexer_max_open_files: 65535
+
+# Maximum locked memory (set to 'unlimited' to enable memory locking)
+wazuh_indexer_max_locked_memory: 'unlimited'
+
+# Enable memory locking to prevent indexer memory from being swapped out
+wazuh_indexer_bootstrap_memory_lock: true

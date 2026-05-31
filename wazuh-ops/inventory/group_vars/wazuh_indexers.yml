@@ -1,0 +1,36 @@
+---
+# ── Wazuh Indexer (OpenSearch) node vars ─────────────────────────────────────
+
+wazuh_indexer_service: wazuh-indexer
+wazuh_indexer_cluster_name: wazuh-indexer-cluster
+wazuh_indexer_http_host: "0.0.0.0"
+wazuh_indexer_http_port: "{{ wazuh_indexer_port }}"
+wazuh_indexer_transport_port: "{{ wazuh_indexer_transport_port }}"
+
+# JVM heap — set to ~50% of RAM, max 31g
+wazuh_indexer_jvm_heap: 1g
+
+# Data and log paths
+wazuh_indexer_data_path: /var/lib/wazuh-indexer
+wazuh_indexer_log_path: /var/log/wazuh-indexer
+
+# Discovery — seed hosts are auto-built from wazuh_indexers inventory group
+# in opensearch.yml.j2. No manual list needed.
+
+# Security plugin — enable after generating certificates
+wazuh_indexer_security_enabled: false
+
+# File descriptor limit
+wazuh_indexer_file_descriptor_limit: 65535
+wazuh_indexer_memory_lock: true
+
+# ── Indexer HA / API access ───────────────────────────────────────────────────
+# Scheme: http when security disabled, https when enabled
+wazuh_indexer_api_scheme: "{{ 'https' if wazuh_indexer_security_enabled else 'http' }}"
+wazuh_indexer_validate_certs: "{{ wazuh_indexer_security_enabled }}"
+# Path to root CA cert (only used when security_enabled: true)
+wazuh_indexer_ca_cert: /etc/wazuh-indexer/certs/root-ca.pem
+
+# Minimum master-eligible nodes for quorum: floor(N/2) + 1
+# Evaluated at runtime — do not hardcode.
+wazuh_indexer_min_master_nodes: "{{ (groups['wazuh_indexers'] | length // 2) + 1 }}"

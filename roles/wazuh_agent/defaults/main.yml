@@ -1,0 +1,127 @@
+---
+# =============================================================================
+# Wazuh Agent - Default Variables
+# =============================================================================
+# These defaults can be overridden in host_vars, group_vars, or playbook vars.
+# Wazuh version: 4.11.2 | Target OS: Ubuntu 24.04 / RHEL
+# =============================================================================
+
+# -------------------------
+# Wazuh Package Version
+# -------------------------
+wazuh_agent_version: "4.11.2"
+
+# -------------------------
+# Manager Connection
+# -------------------------
+# IP address or hostname of the Wazuh manager
+wazuh_agent_manager_ip: "10.0.0.2"
+
+# Manager communication port
+wazuh_agent_manager_port: 1514
+
+# Communication protocol (tcp or udp)
+wazuh_agent_manager_protocol: "tcp"
+
+# -------------------------
+# Agent Enrollment
+# -------------------------
+# Enable automatic enrollment with the manager
+wazuh_agent_enrollment_enabled: "yes"
+
+# Enrollment service port on the manager
+wazuh_agent_enrollment_port: 1515
+
+# Manager address for enrollment (defaults to manager IP)
+wazuh_agent_enrollment_manager_address: "{{ wazuh_agent_manager_ip }}"
+
+# Agent name for registration (defaults to inventory hostname)
+wazuh_agent_enrollment_agent_name: "{{ inventory_hostname }}"
+
+# Registration password (set this in vault for production)
+wazuh_agent_registration_password: ""
+
+# Path to the password file on the agent
+wazuh_agent_authd_pass_path: "/var/ossec/etc/authd.pass"
+
+# -------------------------
+# Agent Groups
+# -------------------------
+# Groups the agent will belong to on the manager
+wazuh_agent_groups:
+  - "default"
+
+# -------------------------
+# Syscheck (File Integrity Monitoring)
+# -------------------------
+# Scan frequency in seconds (default: 12 hours)
+wazuh_agent_syscheck_frequency: 43200
+
+# Whether to run a syscheck scan on agent start
+wazuh_agent_syscheck_scan_on_start: "yes"
+
+# Directories to monitor for file integrity changes
+wazuh_agent_syscheck_directories:
+  - path: "/etc"
+    check_all: "yes"
+    realtime: "no"
+    report_changes: "yes"
+  - path: "/usr/bin"
+    check_all: "yes"
+    realtime: "no"
+    report_changes: "no"
+  - path: "/usr/sbin"
+    check_all: "yes"
+    realtime: "no"
+    report_changes: "no"
+  - path: "/bin"
+    check_all: "yes"
+    realtime: "no"
+    report_changes: "no"
+  - path: "/sbin"
+    check_all: "yes"
+    realtime: "no"
+    report_changes: "no"
+  - path: "/boot"
+    check_all: "yes"
+    realtime: "no"
+    report_changes: "no"
+
+# -------------------------
+# Rootcheck
+# -------------------------
+# Enable rootkit and anomaly detection
+wazuh_agent_rootcheck_enabled: "yes"
+
+# -------------------------
+# Client Buffer
+# -------------------------
+# Enable event buffering
+wazuh_agent_client_buffer_disabled: "no"
+
+# Queue size for buffered events
+wazuh_agent_client_buffer_queue_size: 5000
+
+# Events per second to send
+wazuh_agent_client_buffer_events_per_second: 500
+
+# -------------------------
+# Active Response
+# -------------------------
+# Enable active response on the agent
+wazuh_agent_active_response_disabled: "yes"
+
+# -------------------------
+# Logging
+# -------------------------
+# Log format: plain, json, or plain,json
+wazuh_agent_log_format: "plain"
+
+# -------------------------
+# Service Configuration
+# -------------------------
+# Whether to enable the service on boot
+wazuh_agent_service_enabled: true
+
+# Desired service state
+wazuh_agent_service_state: "started"

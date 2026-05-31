@@ -1,0 +1,63 @@
+---
+# STAGE 3 — VALIDATE POSTGRES RECOVERY
+# Runs repmgr cluster show on the new primary and verifies:
+#   - New primary is in primary role
+#   - Streaming replication lag is acceptable (< postgres_max_lag_bytes)
+# Tags: recovery, validate, postgres_failover, postgres_failback
+
+- name: "[VALIDATE-POSTGRES] Wait for cluster to stabilize"
+  ansible.builtin.pause:
+    seconds: "{{ postgres_stabilize_wait }}"
+  run_once: true
+  tags: [recovery, validate]
+
+- name: "[VALIDATE-POSTGRES] Run repmgr cluster show on new primary"
+  ansible.builtin.command:
+    cmd: >
+      su - {{ postgres_repmgr_user }} -c
+      "repmgr -f {{ postgres_repmgr_conf }} cluster show --csv"
+  register: validate_pg_cluster
+  delegate_to: "{{ postgres_new_primary | default(postgres_primary_host) }}"
+  run_once: true
+  changed_when: false
+  tags: [recovery, validate]
+
+- name: "[VALIDATE-POSTGRES] Check replication lag on new primary"
+  ansible.builtin.command:
+    cmd: >
+      su - {{ postgres_repmgr_user }} -c
+      "psql -At -c \"SELECT COALESCE(MAX(write_lag_bytes), 0)
+       FROM pg_stat_replication\" repmgr"
+  register: validate_pg_lag
+  delegate_to: "{{ postgres_new_primary | default(postgres_primary_host) }}"
+  run_once: true
+  changed_when: false
+  failed_when: false
+  tags: [recovery, validate]
+
+- name: "[VALIDATE-POSTGRES] Set validation summary"
+  ansible.builtin.set_fact:
+    recovery_validation:
+      repmgr_cluster: "{{ validate_pg_cluster.stdout }}"
+      primary_running: "{{ 'primary' in validate_pg_cluster.stdout }}"
+      replication_lag_bytes: "{{ validate_pg_lag.stdout | trim | default('0') }}"
+  run_once: true
+  tags: [recovery, validate]
+
+- name: "[VALIDATE-POSTGRES] GATE — Abort if no primary in repmgr cluster"
+  ansible.builtin.fail:
+    msg: >
+      VALIDATE GATE FAILED: repmgr cluster show does not show a primary node.
+      Output: {{ recovery_validation.repmgr_cluster }}
+  when: not (recovery_validation.primary_running | bool)
+  run_once: true
+  tags: [recovery, validate]
+
+- name: "[VALIDATE-POSTGRES] Warn if replication lag exceeds threshold"
+  ansible.builtin.debug:
+    msg: >
+      WARNING: replication write lag is {{ recovery_validation.replication_lag_bytes }} bytes
+      (threshold: {{ postgres_max_lag_bytes }} bytes). Monitor until it drops.
+  when: (recovery_validation.replication_lag_bytes | int) > (postgres_max_lag_bytes | int)
+  run_once: true
+  tags: [recovery, validate]

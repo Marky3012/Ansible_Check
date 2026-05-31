@@ -1,0 +1,211 @@
+---
+# =============================================================================
+# wazuh_manager - Default Variables
+# =============================================================================
+# All values used in the ossec.conf template and manager tasks.
+# Override these in group_vars/host_vars as needed.
+
+# ---------------------------------------------------------------------------
+# Package
+# ---------------------------------------------------------------------------
+wazuh_manager_package: 'wazuh-manager'
+
+# ---------------------------------------------------------------------------
+# Global / logging settings
+# ---------------------------------------------------------------------------
+wazuh_manager_json_output: 'yes'
+wazuh_manager_alerts_log: 'yes'
+wazuh_manager_logall: 'no'
+wazuh_manager_logall_json: 'no'
+wazuh_manager_log_format: 'plain'
+wazuh_manager_log_level: 1
+
+# ---------------------------------------------------------------------------
+# Email notifications (disabled by default)
+# ---------------------------------------------------------------------------
+wazuh_manager_email_notification: 'no'
+wazuh_manager_email_to: 'admin@example.com'
+wazuh_manager_smtp_server: 'smtp.example.com'
+wazuh_manager_email_from: 'wazuh@example.com'
+wazuh_manager_email_maxperhour: 12
+
+# ---------------------------------------------------------------------------
+# Cluster settings
+# ---------------------------------------------------------------------------
+wazuh_manager_cluster_enabled: 'no'
+wazuh_manager_cluster_name: 'wazuh-cluster'
+wazuh_manager_cluster_node_name: 'manager-node-01'
+wazuh_manager_cluster_node_type: 'master'
+wazuh_manager_cluster_key: 'CHANGE_ME_CLUSTER_KEY_32_CHARS!!'
+wazuh_manager_cluster_port: 1516
+wazuh_manager_cluster_bind_addr: '0.0.0.0'
+wazuh_manager_cluster_nodes:
+  - '{{ ansible_default_ipv4.address | default("127.0.0.1") }}'
+wazuh_manager_cluster_hidden: 'no'
+wazuh_manager_cluster_disabled: 'yes'
+
+# ---------------------------------------------------------------------------
+# Remote (agent connection) settings
+# ---------------------------------------------------------------------------
+wazuh_manager_remote_connection: 'secure'
+wazuh_manager_remote_port: 1514
+wazuh_manager_remote_protocol: 'tcp'
+wazuh_manager_remote_queue_size: 131072
+
+# ---------------------------------------------------------------------------
+# Auth (agent enrollment) settings
+# ---------------------------------------------------------------------------
+wazuh_manager_auth_disabled: 'no'
+wazuh_manager_auth_port: 1515
+wazuh_manager_auth_use_source_ip: 'no'
+wazuh_manager_auth_force_insert: 'yes'
+wazuh_manager_auth_force_time: 0
+wazuh_manager_auth_purge: 'yes'
+wazuh_manager_auth_use_password: 'no'
+wazuh_manager_auth_limit_maxagents: 'yes'
+wazuh_manager_auth_ciphers: 'HIGH:!ADH:!EXP:!MD5:!RC4:!3DES:!CAMELLIA:@STRENGTH'
+wazuh_manager_auth_ssl_verify_host: 'no'
+wazuh_manager_auth_ssl_manager_cert: 'etc/sslmanager.cert'
+wazuh_manager_auth_ssl_manager_key: 'etc/sslmanager.key'
+wazuh_manager_auth_ssl_auto_negotiate: 'no'
+
+# ---------------------------------------------------------------------------
+# Syscheck (file integrity monitoring)
+# ---------------------------------------------------------------------------
+wazuh_manager_syscheck_enabled: 'yes'
+wazuh_manager_syscheck_frequency: 43200
+wazuh_manager_syscheck_scan_on_start: 'yes'
+wazuh_manager_syscheck_auto_ignore: 'no'
+wazuh_manager_syscheck_alert_new_files: 'yes'
+
+wazuh_manager_syscheck_directories:
+  - path: '/etc,/usr/bin,/usr/sbin'
+    check_all: 'yes'
+    realtime: 'no'
+    report_changes: 'yes'
+  - path: '/bin,/sbin,/boot'
+    check_all: 'yes'
+    realtime: 'no'
+    report_changes: 'no'
+
+wazuh_manager_syscheck_ignore:
+  - '/etc/mtab'
+  - '/etc/hosts.deny'
+  - '/etc/mail/statistics'
+  - '/etc/random-seed'
+  - '/etc/random.seed'
+  - '/etc/adjtime'
+  - '/etc/httpd/logs'
+  - '/etc/utmpx'
+  - '/etc/wtmpx'
+  - '/etc/cups/certs'
+  - '/etc/dumpdates'
+  - '/etc/svc/volatile'
+
+wazuh_manager_syscheck_no_diff:
+  - '/etc/ssl/private.key'
+
+# ---------------------------------------------------------------------------
+# Rootcheck
+# ---------------------------------------------------------------------------
+wazuh_manager_rootcheck_enabled: 'yes'
+wazuh_manager_rootcheck_check_files: 'yes'
+wazuh_manager_rootcheck_check_trojans: 'yes'
+wazuh_manager_rootcheck_check_dev: 'yes'
+wazuh_manager_rootcheck_check_sys: 'yes'
+wazuh_manager_rootcheck_check_pids: 'yes'
+wazuh_manager_rootcheck_check_ports: 'yes'
+wazuh_manager_rootcheck_check_if: 'yes'
+wazuh_manager_rootcheck_frequency: 43200
+wazuh_manager_rootcheck_rootkit_files: 'etc/shared/rootkit_files.txt'
+wazuh_manager_rootcheck_rootkit_trojans: 'etc/shared/rootkit_trojans.txt'
+wazuh_manager_rootcheck_skip_nfs: 'yes'
+
+# ---------------------------------------------------------------------------
+# Vulnerability Detector
+# ---------------------------------------------------------------------------
+wazuh_manager_vulnerability_enabled: 'yes'
+wazuh_manager_vulnerability_interval: '5m'
+wazuh_manager_vulnerability_min_full_scan_interval: '6h'
+wazuh_manager_vulnerability_run_on_start: 'yes'
+
+wazuh_manager_vulnerability_providers:
+  - name: 'canonical'
+    enabled: 'no'
+    os:
+      - 'trusty'
+      - 'xenial'
+      - 'bionic'
+      - 'focal'
+      - 'jammy'
+      - 'noble'
+    update_interval: '1h'
+  - name: 'redhat'
+    enabled: 'no'
+    os:
+      - '7'
+      - '8'
+      - '9'
+    update_interval: '1h'
+  - name: 'nvd'
+    enabled: 'yes'
+    update_interval: '1h'
+
+# ---------------------------------------------------------------------------
+# Active Response
+# ---------------------------------------------------------------------------
+wazuh_manager_active_response_enabled: 'yes'
+wazuh_manager_active_responses: []
+# Example:
+# wazuh_manager_active_responses:
+#   - command: 'host-deny'
+#     location: 'local'
+#     level: 6
+#     timeout: 600
+
+# ---------------------------------------------------------------------------
+# Log analysis (localfile)
+# ---------------------------------------------------------------------------
+wazuh_manager_localfiles:
+  - log_format: 'syslog'
+    location: '/var/log/syslog'
+  - log_format: 'syslog'
+    location: '/var/log/auth.log'
+  - log_format: 'syslog'
+    location: '/var/log/dpkg.log'
+  - log_format: 'syslog'
+    location: '/var/ossec/logs/active-responses.log'
+
+# ---------------------------------------------------------------------------
+# API settings
+# ---------------------------------------------------------------------------
+wazuh_manager_api_bind_addr: '0.0.0.0'
+wazuh_manager_api_port: 55000
+wazuh_manager_api_https: 'yes'
+wazuh_manager_api_behind_proxy: 'no'
+
+# Optional API user configuration
+wazuh_manager_api_user: ''
+wazuh_manager_api_password: ''
+
+# ---------------------------------------------------------------------------
+# Ruleset
+# ---------------------------------------------------------------------------
+wazuh_manager_ruleset_decoder_dir: 'ruleset/decoders'
+wazuh_manager_ruleset_rule_dir: 'ruleset/rules'
+wazuh_manager_ruleset_rule_exclude: []
+wazuh_manager_ruleset_decoder_exclude: []
+wazuh_manager_ruleset_cdb_lists: []
+# Example:
+# wazuh_manager_ruleset_cdb_lists:
+#   - 'etc/lists/audit-keys'
+
+# ---------------------------------------------------------------------------
+# Service configuration
+# ---------------------------------------------------------------------------
+wazuh_manager_service_enabled: true
+wazuh_manager_service_state: 'started'
+
+# API availability check
+wazuh_manager_api_wait_retries: 12
+wazuh_manager_api_wait_delay: 10

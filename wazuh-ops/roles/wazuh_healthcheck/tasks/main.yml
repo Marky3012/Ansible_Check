@@ -1,0 +1,97 @@
+---
+# wazuh_healthcheck — orchestrates all component checks and writes reports
+# This role is READ-ONLY. It never restarts services or modifies config.
+
+- name: Gather facts for timestamp
+  ansible.builtin.setup:
+    gather_subset: [min]
+  tags: [healthcheck]
+
+- name: Run Manager health checks
+  ansible.builtin.include_tasks: check_manager.yml
+  when:
+    - enable_manager_check | bool
+    - inventory_hostname in groups['wazuh_managers']
+  tags: [healthcheck, check_manager]
+
+- name: Run Agent disconnect check
+  ansible.builtin.include_tasks: check_agents.yml
+  when:
+    - enable_agent_check | bool
+    - groups['wazuh_managers'] | length > 0
+    - inventory_hostname == groups['wazuh_managers'][0]
+  tags: [healthcheck, check_agents]
+
+- name: Run Indexer health checks
+  ansible.builtin.include_tasks: check_indexer.yml
+  when:
+    - enable_indexer_check | bool
+    - inventory_hostname in groups['wazuh_indexers']
+  tags: [healthcheck, check_indexer]
+
+- name: Run HAProxy health checks
+  ansible.builtin.include_tasks: check_haproxy.yml
+  when:
+    - enable_haproxy_check | bool
+    - inventory_hostname in groups['haproxy_nodes']
+  tags: [healthcheck, check_haproxy]
+
+- name: Run Keepalived health checks
+  ansible.builtin.include_tasks: check_keepalived.yml
+  when:
+    - enable_keepalived_check | bool
+    - inventory_hostname in groups['haproxy_nodes']
+  tags: [healthcheck, check_keepalived]
+
+# ── Assemble and write reports ─────────────────────────────────────────────────
+
+- name: Assemble health summary
+  ansible.builtin.set_fact:
+    health_summary:
+      timestamp: "{{ ansible_date_time.iso8601 }}"
+      host: "{{ inventory_hostname }}"
+      manager: "{{ manager_status_entry | default({'status': 'SKIPPED'}) }}"
+      agents: "{{ agent_health | default({'status': 'SKIPPED'}) }}"
+      indexer: "{{ indexer_status_entry | default({'status': 'SKIPPED'}) }}"
+      haproxy: "{{ haproxy_status_entry | default({'status': 'SKIPPED'}) }}"
+      keepalived: "{{ keepalived_status_entry | default({'status': 'SKIPPED'}) }}"
+  tags: [healthcheck]
+
+- name: Ensure reports directory exists
+  ansible.builtin.file:
+    path: "{{ report_dir }}"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  run_once: true
+  tags: [healthcheck]
+
+- name: Write JSON health report
+  ansible.builtin.copy:
+    content: "{{ health_summary | to_nice_json }}"
+    dest: "{{ report_dir }}/healthcheck_{{ inventory_hostname }}_{{ ansible_date_time.iso8601_basic_short }}.json"
+    mode: "0644"
+  delegate_to: localhost
+  tags: [healthcheck]
+
+- name: Render text health report
+  ansible.builtin.template:
+    src: health_report.j2
+    dest: "{{ report_dir }}/healthcheck_{{ inventory_hostname }}_{{ ansible_date_time.iso8601_basic_short }}.txt"
+    mode: "0644"
+  delegate_to: localhost
+  tags: [healthcheck]
+
+- name: Assert no critical component is DOWN
+  ansible.builtin.assert:
+    that:
+      - health_summary.manager.status not in critical_statuses
+      - health_summary.haproxy.status not in critical_statuses
+      - health_summary.keepalived.status not in critical_statuses
+    fail_msg: "CRITICAL: one or more components are in a critical state — check {{ report_dir }}"
+    success_msg: "All monitored components are healthy on {{ inventory_hostname }}"
+  when: >
+    health_summary.manager.status != 'SKIPPED' or
+    health_summary.haproxy.status != 'SKIPPED' or
+    health_summary.keepalived.status != 'SKIPPED'
+  tags: [healthcheck]

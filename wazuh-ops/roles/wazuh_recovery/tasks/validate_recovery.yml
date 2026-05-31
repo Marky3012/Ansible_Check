@@ -1,0 +1,49 @@
+---
+# STAGE 3 — VALIDATE
+# Re-checks HAProxy backend states and VIP placement after the script ran.
+# Hard abort if validation fails.
+# Tags: recovery, validate
+
+- name: "[VALIDATE] Wait for HA layer to stabilize"
+  ansible.builtin.pause:
+    seconds: "{{ recovery_stabilize_wait }}"
+  run_once: true
+  tags: [recovery, validate]
+
+- name: "[VALIDATE] Re-check HAProxy service"
+  ansible.builtin.command:
+    cmd: systemctl is-active haproxy
+  register: validate_haproxy_svc
+  changed_when: false
+  failed_when: false
+  tags: [recovery, validate]
+
+- name: "[VALIDATE] Re-check VIP binding"
+  ansible.builtin.shell:
+    cmd: "ip addr show {{ keepalived_interface }} | grep -c '{{ keepalived_virtual_ip }}' || true"
+  register: validate_vip
+  changed_when: false
+  tags: [recovery, validate]
+
+- name: "[VALIDATE] Query HAProxy backend states via stats socket"
+  ansible.builtin.shell:
+    cmd: "echo 'show stat' | socat unix-connect:{{ haproxy_stats_socket_path }} stdio 2>/dev/null | grep '^{{ haproxy_backend_name }},' | grep -v ',BACKEND,' || echo 'SOCKET_ERROR'"
+  register: validate_backend_stats
+  changed_when: false
+  failed_when: false
+  when: (validate_vip.stdout | trim | int) > 0
+  tags: [recovery, validate]
+
+- name: "[VALIDATE] Set validation summary"
+  ansible.builtin.set_fact:
+    recovery_validation:
+      haproxy_active: "{{ validate_haproxy_svc.rc == 0 }}"
+      vip_present: "{{ (validate_vip.stdout | trim | int) > 0 }}"
+      backends_up: "{{ validate_backend_stats.stdout is defined and 'DOWN' not in validate_backend_stats.stdout and validate_backend_stats.stdout != 'SOCKET_ERROR' }}"
+  tags: [recovery, validate]
+
+- name: "[VALIDATE] GATE — Abort if HAProxy is not active post-recovery"
+  ansible.builtin.fail:
+    msg: "VALIDATE GATE FAILED: HAProxy is not active on {{ inventory_hostname }} after recovery. Manual intervention required."
+  when: not (recovery_validation.haproxy_active | bool)
+  tags: [recovery, validate]
